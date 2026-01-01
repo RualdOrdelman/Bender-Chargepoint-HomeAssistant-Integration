@@ -1,0 +1,15 @@
+# System files
+.DS_Store
+**/.DS_Store
+
+# User Configuration (Secrets)
+HomeAssistant/configuration.yaml
+secrets.yaml
+
+# Logs
+*.log
+
+# Artifacts & System
+.gemini/
+artifacts/
+.system_generated/

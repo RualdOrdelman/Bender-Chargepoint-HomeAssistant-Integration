@@ -1,0 +1,593 @@
+# This file contains the core entities of the House Battery Control.
+# It should be included in the main configuration.yaml file as a `package` via `!include_dir_named` https://www.home-assistant.io/docs/configuration/packages/.
+# Replace this file when updating `House Battery Control`.
+
+###########################################################################################################
+# BOOLEAN
+###########################################################################################################
+input_boolean:
+  # Analytics
+  house_battery_control_has_node_red:
+    name: Node Red Ready
+
+  house_battery_control_is_charging:
+    name: Charging
+
+  # Supported strategies
+  house_battery_strategy_timed_has_period_b:
+    name: Enable additional period B
+    icon: mdi:clock-outline
+
+  house_battery_strategy_timed_has_period_c:
+    name: Enable additional period C
+    icon: mdi:clock-outline
+
+  house_battery_strategy_timed_has_max_power:
+    name: Charge at max. power
+    icon: mdi:power-plug-battery-outline
+
+###########################################################################################################
+# DATETIME
+###########################################################################################################
+input_datetime:
+  house_battery_strategy_timed_period_a1:
+    name: Period A start
+    has_date: false
+    has_time: true
+    icon: mdi:clock-start
+
+  house_battery_strategy_timed_period_a2:
+    name: Period A stop
+    has_date: false
+    has_time: true
+    icon: mdi:clock-end
+
+  house_battery_strategy_timed_period_b1:
+    name: Period B start
+    has_date: false
+    has_time: true
+    icon: mdi:clock-start
+
+  house_battery_strategy_timed_period_b2:
+    name: Period B stop
+    has_date: false
+    has_time: true
+    icon: mdi:clock-end
+
+  house_battery_strategy_timed_period_c1:
+    name: Period C start
+    has_date: false
+    has_time: true
+    icon: mdi:clock-start
+
+  house_battery_strategy_timed_period_c2:
+    name: Period C stop
+    has_date: false
+    has_time: true
+    icon: mdi:clock-end
+
+  house_battery_strategy_dynamic_cheapest_start:
+    name: Charge start
+    has_date: true
+    has_time: true
+    icon: mdi:clock-start
+
+  house_battery_strategy_dynamic_cheapest_end:
+    name: Charge end
+    has_date: true
+    has_time: true
+    icon: mdi:clock-end
+
+  house_battery_strategy_dynamic_expensive_start:
+    name: Expensive start
+    has_date: true
+    has_time: true
+    icon: mdi:clock-start
+
+  house_battery_strategy_dynamic_expensive_end:
+    name: Expensive end
+    has_date: true
+    has_time: true
+    icon: mdi:clock-end
+
+###########################################################################################################
+# INPUT_NUMBER
+###########################################################################################################
+input_number:
+  # Core configuration
+  house_battery_count:
+    # Number of Marstek batteries
+    name: "Number of batteries"
+    min: 1
+    max: 4
+    step: 1
+    unit_of_measurement: ""
+    mode: slider
+    icon: mdi:battery-plus-variant
+
+  # Which battery has priority (this battery will go first in the charging order)
+  house_battery_control_prioritize_battery:
+    name: "Prioritize battery"
+    min: 1
+    max: 4
+    step: 1
+    unit_of_measurement: ""
+    mode: box
+    icon: mdi:battery-arrow-up
+
+  # Total usable energy in batteries
+  house_battery_total_available_energy:
+    name: "Total available energy"
+    min: -10
+    max: 1000
+    initial: 0
+    unit_of_measurement: "kWh"
+    mode: box
+    icon: mdi:power-plug-battery
+
+  # Strategy | self consumption (NoM)
+  house_target_grid_consumption_in_w:
+    # Target grid consumption control
+    name: "House Target Grid Consumption"
+    min: -15000
+    max: 15000
+    initial: 0 # after each reboot/restart the target will be 0
+    step: 1
+    unit_of_measurement: "W"
+    mode: box
+    icon: mdi:chart-timeline-variant # line chart
+
+  house_battery_control_error_signal:
+    # PID control error
+    name: "House Battery Control Error Signal"
+    min: -15000
+    max: 15000
+    step: 0.1
+    unit_of_measurement: "W"
+    mode: box
+    initial: 0
+    icon: mdi:chart-timeline-variant-shimmer # shimmering line chart
+
+  house_battery_control_pid_output:
+    # PID output = manipulated variable = battery power setpoint
+    # Batteries are commanded to deliver or charge by this amount
+    name: "House Battery Control PID Output"
+    min: -15000
+    max: 15000
+    step: 0.1
+    unit_of_measurement: "W"
+    mode: box
+    initial: 0
+    icon: mdi:chart-timeline-variant-shimmer # shimmering line chart
+
+  house_battery_control_hysteresis_in_w:
+    # PID optimization
+    # Prevents excessive switching between (dis)charge mode around the zero point.
+    # Let the battery switch from charge/discharge only when the demand is larger than the hysteresis.
+    name: "House Battery Control Hysteresis in W"
+    min: 0 # no hysteresis. The control system switches instantly from charge to discharge and back again when crossing the 0 point.
+    max: 200
+    step: 1
+    unit_of_measurement: "W"
+    mode: slider # 'box' of 'slider'
+    icon: mdi:numeric
+
+  house_battery_control_idle_time:
+    # Distribution optimization
+    # Prevents excessive ON/OFF switching of the inverter relay.
+    # The inverter switches OFF after being idle for the configured duration
+    name: "House Battery Control Stop after Idle for Minutes"
+    min: 0 # no idling, battery inverter instantly latches OFF when 0 Watt is requested.
+    max: 60 # STOPS after 1 hour.
+    step: 1
+    unit_of_measurement: "min"
+    mode: box # 'box' of 'slider'
+    icon: mdi:timer-lock
+
+  house_battery_control_kp:
+    # PID proportional amplification Kp
+    name: "House Battery Control Proportional (Kp)"
+    min: 0 # no proportional control
+    max: 2 # excessive proportional amplification
+    step: 0.05
+    unit_of_measurement: ""
+    mode: box # 'box' of 'slider'
+    icon: mdi:amplifier
+
+  house_battery_control_ki:
+    # PID integral amplification Ki
+    # removes residual offset / steady state errors
+    name: "House Battery Control Integral (Ki)"
+    min: 0 # no integrating control
+    max: 5
+    step: 0.05
+    unit_of_measurement: ""
+    mode: box # 'box' of 'slider'
+    icon: mdi:amplifier
+
+  house_battery_control_kd:
+    # PID differential amplification Kd
+    # help anticipate next value based on rate of change
+    name: "House Battery Control Differential (Kd)"
+    min: 0 # no integrating control
+    max: 5
+    step: 0.05
+    unit_of_measurement: ""
+    mode: box # 'box' of 'slider'
+    icon: mdi:amplifier
+
+  house_battery_control_pid_output_dampening:
+    # PID control output dampening
+    name: "HBC Output Dampening"
+    min: 0 # the newly calculated PID value will be used for 100% as the final output value.
+    max: 90 # only 10% of the new PID value is used in the final PID value. 100% would fixate the output.
+    step: 10
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:car-brake-parking # shimmering line chart
+
+  house_battery_control_error_signal_dampening:
+    # PID control input dampening
+    name: "HBC Error Dampening"
+    min: 0
+    max: 90
+    step: 10
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:car-brake-parking # shimmering line chart
+
+  ##### PID Analytics #####
+  house_battery_control_p_term:
+    # output only, calculated p_term
+    name: "House Battery Control P-term"
+    min: -10000 # arbitrary
+    max: 10000 # arbitrary
+    step: 1
+    unit_of_measurement: "W"
+    mode: box
+    initial: 0
+    icon: mdi:chart-timeline-variant-shimmer # shimmering line chart
+
+  house_battery_control_i_term:
+    # output only, calculated i_term
+    name: "House Battery Control I-term"
+    min: -10000 # arbitrary
+    max: 10000 # arbitrary
+    step: 1
+    unit_of_measurement: "W"
+    mode: box
+    initial: 0
+    icon: mdi:chart-timeline-variant-shimmer # shimmering line chart
+
+  house_battery_control_d_term:
+    # output only, calculated p_term
+    name: "House Battery Control D-term"
+    min: -10000 # arbitrary
+    max: 10000 # arbitrary
+    step: 1
+    unit_of_measurement: "W"
+    mode: box
+    initial: 0
+    icon: mdi:chart-timeline-variant-shimmer # shimmering line chart
+
+  house_battery_control_error_deviation:
+    # output only, the deviation in the error signal
+    name: "HBC Error Deviation"
+    min: -10000 # arbitrary
+    max: 10000 # arbitrary
+    step: 1
+    unit_of_measurement: "W"
+    mode: box
+    initial: 0
+    icon: mdi:chart-timeline-variant-shimmer # shimmering line chart
+
+  house_battery_control_pid_output_deviation:
+    # output only, deviation in the pid output
+    name: "HBC PID Output Deviation"
+    min: -10000 # arbitrary
+    max: 10000 # arbitrary
+    step: 1
+    unit_of_measurement: "W"
+    mode: box
+    initial: 0
+    icon: mdi:chart-timeline-variant-shimmer # shimmering line chart
+
+  house_battery_control_debug:
+    # output only
+    name: "HBC debug"
+    min: -10000 # arbitrary
+    max: 10000 # arbitrary
+    step: 1
+    unit_of_measurement: ""
+    mode: box
+    initial: 0
+    icon: mdi:chart-timeline-variant-shimmer # shimmering line chart
+
+  # Strategy timed | desired energy reserve (effective energy available excl. cut-off energies)
+  house_battery_strategy_timed_target_energy:
+    name: Desired battery energy reserve
+    min: 0
+    max: 30
+    unit_of_measurement: "kWh"
+    mode: box
+    icon: mdi:battery-charging
+
+  # Strategy timed | desired charging power
+  house_battery_strategy_timed_target_power:
+    name: Desired charging power
+    min: 0
+    max: 7500
+    unit_of_measurement: "W"
+    mode: box
+    icon: mdi:battery-charging
+
+  # Strategy dynamic | select the N most cheapest hours of the day
+  house_battery_strategy_dynamic_cheapest_hrs:
+    name: Cheapest hours
+    icon: mdi:clock-outline
+    min: 1 # Select at least 1 hour
+    max: 8 # Using more than 4 hrs is usualy not advised
+    step: 1 # Whole hour steps
+    unit_of_measurement: "h"
+    mode: box
+
+  # Strategy dynamic | select the N most expensive hours of the day
+  house_battery_strategy_dynamic_expensive_hrs:
+    name: Expensive hours
+    icon: mdi:clock-outline
+    min: 1 # Select at least 1 hour
+    max: 23 # Using more than 4 hrs is usualy not advised
+    step: 1 # Whole hour steps
+    unit_of_measurement: "h"
+    mode: box
+
+  # Strategy dynamic | minimum difference between cheapest and expensive tariff, before switching to battery power.
+  house_battery_strategy_dynamic_threshold_delta:
+    name: Minimum difference
+    icon: mdi:cash
+    min: 0
+    max: 20
+    step: 1 # Cents
+    unit_of_measurement: "Cents"
+    mode: box
+
+  # Strategy dynamic | average tariff of cheapest period
+  house_battery_strategy_dynamic_cheapest_avg_tariff:
+    name: Avg cheapest tariff
+    icon: mdi:cash
+    min: 0
+    max: 1000
+    step: 0.01 # Cents
+    # unit_of_measurement: "EUR/USD"
+    mode: box
+
+  # Strategy dynamic | average tariff of expensive period
+  house_battery_strategy_dynamic_expensive_avg_tariff:
+    name: Avg expensive tariff
+    icon: mdi:cash
+    min: 0
+    max: 1000
+    step: 0.01 # Cents
+    # unit_of_measurement: "Cents"
+    mode: box
+
+  # Strategy dynamic | average difference between cheapes and expensive tariff
+  house_battery_strategy_dynamic_expensive_avg_delta:
+    name: Avg delta
+    icon: mdi:cash
+    min: 0
+    max: 1000
+    step: 0.01 # Cents
+    # unit_of_measurement: "Cents"
+    mode: box
+
+###########################################################################################################
+# INPUT_TEXT
+###########################################################################################################
+input_text:
+  house_battery_strategy_active_sub_strategy:
+    name: "Active sub-strategy"
+    icon: mdi:strategy
+
+  house_battery_strategy_ev_sensor_entity_id:
+    name: "EV is charging entity_id (input_boolean)"
+    icon: mdi:identifier
+
+###########################################################################################################
+# INPUT_SELECT
+###########################################################################################################
+input_select:
+  # Master control mode (which device controls your batteries)
+  marstek_master_battery_mode:
+    name: Master Battery Mode
+    options:
+      - Manual control # Forces Marstek into Manual Work mode. Follows the schedule configured in the Marstek App
+      - Marstek control # Lets Marstek's own control algorithm take over. Remember to set the work mode: manual, anti-feed or ai.
+      - Full control # Full control over the battery, no Marstek control
+    icon: mdi:battery-heart
+
+  # Master strategy
+  house_battery_strategy:
+    name: House Battery Strategy
+    options:
+      - Full stop # Stop (dis)charging and disengage grid relay
+      - Self-consumption # Use your own solar production. Don't buy or sell. Target grid consumption = 0, e.g. "Nul op de meter (NoM)" in Dutch.
+      - Timed # Configure which strategy should be active during given periods of the day.
+      - Dynamic # Requires a dynamic tariff contract and the Cheapest Hours HACS add-on
+      - Charge PV # Charge when surplus PV is available, batteries will not discharge
+    icon: mdi:home-battery
+
+  # Available sub-strategies for timed / smart
+  house_battery_strategy_timed_substrat_list:
+    name: Sub-strategies
+    options: &SubStrategies
+      - Full stop # Deactivate batteries
+      - Self-consumption # Target grid consumption = 0
+      - Charge # Uses self-consumption strategy with smart settings and target grid consumption > 0
+      - Charge PV # Charge when surplus PV is available, batteries will not discharge
+
+  # How often is battery priority cycled automatically?
+  house_battery_control_priority_change_interval:
+    name: "Auto Cycle"
+    options:
+      - Weekly
+      - Daily
+      - Never
+    icon: mdi:battery-clock
+
+  # Self consumption strategy | PID presets
+  house_battery_control_pid_presets:
+    name: "PID presets"
+    options:
+      - Custom
+      - Very safe
+      - Safe
+      - Regular
+    icon: mdi:list-box
+
+  # Timed strategy | default strategy
+  house_battery_strategy_timed_strat_0:
+    name: Baseline strategy
+    options: *SubStrategies
+    icon: mdi:distribute-horizontal-right
+
+  # Timed strategy | during period A
+  house_battery_strategy_timed_strat_a:
+    name: During period A
+    options: *SubStrategies
+    icon: mdi:distribute-horizontal-center
+
+  # Timed strategy | during period B
+  house_battery_strategy_timed_strat_b:
+    name: During period B
+    options: *SubStrategies
+    icon: mdi:distribute-horizontal-center
+
+  # Timed strategy | during period C
+  house_battery_strategy_timed_strat_c:
+    name: During period C
+    options: *SubStrategies
+    icon: mdi:distribute-horizontal-center
+
+  # Dynamic strategy | energy suppliers
+  house_battery_strategy_dynamic_data_source:
+    name: Tariff data source
+    options:
+      - None
+      - Zonneplan
+      - Amber Electric
+      - EasyEnergy, EnergyZero (core)
+      - ENTSO-E
+      - Frank Energie
+      - GE-Spot
+      - Tibber, Nordpool (core)
+      - Tibber (custom)
+      - Nordpool (custom)
+      - PVPC (Spain)
+      - Octopus Energy
+      - Omie
+    icon: mdi:factory
+
+###########################################################################################################
+# TEMPLATE SENSORS
+###########################################################################################################
+template:
+  # Sensor that calculates how long the batteries can still discharge, keeping in mind that batteries should not go below 11%
+  - sensor:
+      # Total power delivered by all batteries
+      - name: "House Total Battery Power"
+        unique_id: "house_total_battery_power_in_w"
+        state_class: measurement
+        device_class: "power"
+        unit_of_measurement: "W"
+        state: >
+          {# Configuration #}
+          {% set bat_entities = [
+            'sensor.marstek_m1_battery_power', 
+            'sensor.marstek_m2_battery_power',
+            'sensor.marstek_m3_battery_power', 
+            'sensor.marstek_m4_battery_power',
+          ] %}
+
+          {# Filter entities on valid values and retrieve power #}
+          {% set available_powers = expand(bat_entities) 
+            | selectattr('state', 'is_number') 
+            | map(attribute='state') 
+            | map('float', 0) 
+            | list 
+          %}
+
+          {# Check if any battery power sensor is available #}
+          {% if available_powers | length > 0 %}
+            {# Sum all available power readings #}
+            {% set total_power = available_powers | sum %}
+            {# Marstek uses negative power when delivering power, positive when charging. This is inverse from what HA expects.#}
+            {{ (total_power * -1) | round(2) }}
+          {% else %}
+            unavailable
+          {% endif %}
+
+      # Time Remaining
+      - name: "Battery time remaining"
+        unique_id: house_battery_time_remaining
+        state: >
+          {# this value is calculated in the template sensor above #}
+          {% set power = max(0, states('sensor.house_total_battery_power_in_w') | float(0)) %}
+          {# this input_number is calculated in the Node-RED flows #}
+          {% set capacity_kwh = states('input_number.house_battery_total_available_energy') | float(0) %}
+          {# display #}
+          {% if power > 0 and capacity_kwh > 0 %}
+            {% set time_hrs = (capacity_kwh * 1000) / power %}
+            {% set hrs = time_hrs | int %}
+            {% set minutes = ((time_hrs - hrs) * 60) | int %}
+            {{ '{:02}:{:02}'.format(hrs, minutes) }} hours ({{capacity_kwh | round(2)}} kWh)
+          {% else %}
+            Charging ({{capacity_kwh | round(2)}} kWh)
+          {% endif %}
+
+      # EV stop trigger
+      - name: "EV is charging"
+        unique_id: ev_is_charging
+        icon: mdi:ev-station
+        state: >
+          {% set entity_id = states('input_text.house_battery_strategy_ev_sensor_entity_id') %}
+          {% if entity_id is none or bron_entity_id == '' %}
+            off
+          {% else %}
+            {{ states(entity_id) }}
+          {% endif %}
+
+  - binary_sensor:
+      # Strategy charge | has the target energy level been reached?
+      - name: "Target energy reserve reached"
+        unique_id: house_battery_strategy_target_energy_status
+        icon: mdi:battery-check
+
+        # The sensor is 'on' (true) if the available
+        state: >
+          {{ states('input_number.house_battery_total_available_energy') | float(0) >= 
+              states('input_number.house_battery_strategy_timed_target_energy') | float(0) }}
+
+        # Optional: Prevents rapid flickering if values change quickly near the threshold
+        delay_off:
+          seconds: 5
+
+###########################################################################################################
+# RECORDER - LOGBOOK FILTERING
+###########################################################################################################
+# Exclude high-frequency technical entities from the logbook to reduce noise.
+# History graphs and statistics remain unaffected.
+recorder:
+  exclude:
+    entity_globs:
+      # PID control signals (updated every 2-40 seconds during operation)
+      - input_number.house_battery_control_*_term
+      - input_number.house_battery_control_*_deviation
+      - input_number.house_battery_control_error_signal
+      # - input_number.house_battery_control_pid_output  # optional: this is useful for debugging
+      - input_number.house_battery_control_debug
+      # Dynamic strategy calculated values (updated hourly)
+      - input_number.house_battery_strategy_dynamic_*_avg_*
+      # Status fields (updated frequently)
+      - input_number.house_battery_total_available_energy
+      - sensor.battery_time_remaining

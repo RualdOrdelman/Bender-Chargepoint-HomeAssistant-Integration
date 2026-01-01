@@ -1,0 +1,73 @@
+[
+    {
+        "id": "bender_strategy_manual_tab",
+        "type": "tab",
+        "label": "Bender Strategy Manual",
+        "disabled": false,
+        "info": "Manual strategy: Allows manual setting of DLM limits"
+    },
+    {
+        "id": "bender_manual_group",
+        "type": "group",
+        "z": "bender_strategy_manual_tab",
+        "name": "Manual Strategy - Handbediening",
+        "style": {
+            "label": true
+        },
+        "nodes": [
+            "bender_manual_start_link",
+            "bender_manual_status"
+        ],
+        "x": 14,
+        "y": 19,
+        "w": 572,
+        "h": 122
+    },
+    {
+        "id": "bender_manual_start_link",
+        "type": "link in",
+        "z": "bender_strategy_manual_tab",
+        "g": "bender_manual_group",
+        "name": "Manual Start",
+        "links": [
+            "bender_master_link_manual"
+        ],
+        "x": 65,
+        "y": 80,
+        "wires": [
+            [
+                "bender_manual_status"
+            ]
+        ]
+    },
+    {
+        "id": "bender_manual_status",
+        "type": "api-call-service",
+        "z": "bender_strategy_manual_tab",
+        "g": "bender_manual_group",
+        "name": "Set status: Handbediening",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.bender_strategy_active_status"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"Manual: Handbediening actief (DLM limiet)\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 300,
+        "y": 80,
+        "wires": [
+            []
+        ]
+    }
+]

@@ -1,0 +1,461 @@
+title: Bender Laadpaal
+views:
+  # ==============================================================================
+  # VIEW 1: LAADPAAL (Monitor & Bediening)
+  # ==============================================================================
+  - title: Laadpaal
+    path: laadpaal
+    icon: mdi:ev-station
+    panel: true
+    cards:
+      - type: horizontal-stack
+        cards:
+          # ==================== KOLOM 1: STRATEGIE & STATUS ====================
+          - type: vertical-stack
+            cards:
+              # --- STRATEGIE SELECTIE ---
+              - type: entities
+                title: "🎯 Laadstrategie"
+                entities:
+                  - entity: input_select.bender_charging_strategy
+                    name: Actieve Strategie
+                    icon: mdi:strategy
+                  - entity: input_text.bender_strategy_active_status
+                    name: Status
+                    icon: mdi:information
+                  - entity: binary_sensor.bender_charging_active
+                    name: Actief aan het laden
+                    icon: mdi:ev-station
+              
+              # Quick Strategy Buttons
+              - type: horizontal-stack
+                cards:
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state: "Uit"
+                    card:
+                      type: button
+                      name: "Uit"
+                      icon: mdi:power-off
+                      icon_height: 30px
+                      show_state: false
+                      card_mod:
+                        style: |
+                          ha-card {
+                            background-color: rgba(76, 175, 80, 0.2);
+                            border: 1px solid rgba(76, 175, 80, 0.5);
+                          }
+                      tap_action:
+                        action: none
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state_not: "Uit"
+                    card:
+                      type: button
+                      name: "Uit"
+                      icon: mdi:power-off
+                      icon_height: 30px
+                      tap_action:
+                        action: call-service
+                        service: input_select.select_option
+                        data:
+                          entity_id: input_select.bender_charging_strategy
+                          option: "Uit"
+
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state: "Direct"
+                    card:
+                      type: button
+                      name: "Direct"
+                      icon: mdi:flash
+                      icon_height: 30px
+                      card_mod:
+                        style: |
+                          ha-card {
+                            background-color: rgba(255, 152, 0, 0.2);
+                            border: 1px solid rgba(255, 152, 0, 0.5);
+                          }
+                      tap_action:
+                        action: none
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state_not: "Direct"
+                    card:
+                      type: button
+                      name: "Direct"
+                      icon: mdi:flash
+                      icon_height: 30px
+                      tap_action:
+                        action: call-service
+                        service: input_select.select_option
+                        data:
+                          entity_id: input_select.bender_charging_strategy
+                          option: "Direct"
+                          
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state: "Manual"
+                    card:
+                      type: button
+                      name: "Manual"
+                      icon: mdi:hand-back-left
+                      icon_height: 30px
+                      card_mod:
+                        style: |
+                          ha-card {
+                            background-color: rgba(156, 39, 176, 0.2);
+                            border: 1px solid rgba(156, 39, 176, 0.5);
+                          }
+                      tap_action:
+                        action: none
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state_not: "Manual"
+                    card:
+                      type: button
+                      name: "Manual"
+                      icon: mdi:hand-back-left
+                      icon_height: 30px
+                      tap_action:
+                        action: call-service
+                        service: input_select.select_option
+                        data:
+                          entity_id: input_select.bender_charging_strategy
+                          option: "Manual"
+
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state: "ChargePV"
+                    card:
+                      type: button
+                      name: "ChargePV"
+                      icon: mdi:solar-power
+                      icon_height: 30px
+                      card_mod:
+                        style: |
+                          ha-card {
+                            background-color: rgba(255, 235, 59, 0.2);
+                            border: 1px solid rgba(255, 235, 59, 0.5);
+                          }
+                      tap_action:
+                        action: none
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state_not: "ChargePV"
+                    card:
+                      type: button
+                      name: "ChargePV"
+                      icon: mdi:solar-power
+                      icon_height: 30px
+                      tap_action:
+                        action: call-service
+                        service: input_select.select_option
+                        data:
+                          entity_id: input_select.bender_charging_strategy
+                          option: "ChargePV"
+
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state: "Dynamic"
+                    card:
+                      type: button
+                      name: "Dynamic"
+                      icon: mdi:currency-eur
+                      icon_height: 30px
+                      card_mod:
+                        style: |
+                          ha-card {
+                            background-color: rgba(33, 150, 243, 0.2);
+                            border: 1px solid rgba(33, 150, 243, 0.5);
+                          }
+                      tap_action:
+                        action: none
+                  - type: conditional
+                    conditions:
+                      - entity: input_select.bender_charging_strategy
+                        state_not: "Dynamic"
+                    card:
+                      type: button
+                      name: "Dynamic"
+                      icon: mdi:currency-eur
+                      icon_height: 30px
+                      tap_action:
+                        action: call-service
+                        service: input_select.select_option
+                        data:
+                          entity_id: input_select.bender_charging_strategy
+                          option: "Dynamic"
+
+              # --- STATUS ---
+              - type: entities
+                title: "🔌 Status"
+                entities:
+                  - entity: sensor.bender_charge_point_status
+                    name: Charge Point Status
+                    icon: mdi:ev-station
+                  - entity: sensor.bender_charging_power_total
+                    name: Totaal Laadvermogen
+                    icon: mdi:flash
+                  - entity: sensor.bender_totalenergy
+                    name: Totaal Energie
+                    icon: mdi:lightning-bolt
+
+              # --- STOP KNOP (klein) ---
+              - type: button
+                name: "Stop Sessie"
+                icon: mdi:stop-circle
+                icon_height: 20px
+                show_state: false
+                tap_action:
+                  action: call-service
+                  service: script.bender_remote_stop
+                  confirmation:
+                    text: "⚠️ Weet je zeker dat je de laadsessie geforceerd wilt stoppen?"
+                card_mod:
+                  style: |
+                    ha-card {
+                      background-color: #d32f2f;
+                      color: white;
+                    }
+
+              # --- MANUAL CONTROL BUTTONS ---
+              - type: conditional
+                conditions:
+                  - entity: input_select.bender_charging_strategy
+                    state: "Manual"
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: entities
+                      title: "⚙️ Manual Instellen (A)"
+                      entities: []
+                    - type: horizontal-stack
+                      cards:
+                        - type: button
+                          name: "6A"
+                          tap_action:
+                            action: call-service
+                            service: script.set_bender_dlm_limits
+                            data:
+                              l1: 6
+                              l2: 6
+                              l3: 6
+                        - type: button
+                          name: "10A"
+                          tap_action:
+                            action: call-service
+                            service: script.set_bender_dlm_limits
+                            data:
+                              l1: 10
+                              l2: 10
+                              l3: 10
+                        - type: button
+                          name: "16A"
+                          tap_action:
+                            action: call-service
+                            service: script.set_bender_dlm_limits
+                            data:
+                              l1: 16
+                              l2: 16
+                              l3: 16
+
+          # ==================== KOLOM 2: STROOM, VERMOGEN & LIMIETEN ====================
+          - type: vertical-stack
+            cards:
+              # --- DLM LIMIET GLANCE (ALWAYS VISIBLE) ---
+              - type: glance
+                title: "🚦 DLM Limieten (A)"
+                entities:
+                  - entity: sensor.bender_dlm_limit_l1
+                    name: L1
+                  - entity: sensor.bender_dlm_limit_l2
+                    name: L2
+                  - entity: sensor.bender_dlm_limit_l3
+                    name: L3
+
+              # --- STROOM PER FASE ---
+              - type: glance
+                title: "🔋 Stroom per Fase (mA)"
+                entities:
+                  - entity: sensor.bender_current_l1
+                    name: L1
+                  - entity: sensor.bender_current_l2
+                    name: L2
+                  - entity: sensor.bender_current_l3
+                    name: L3
+
+              # --- VERMOGEN PER FASE ---
+              - type: glance
+                title: "⚡ Vermogen per Fase"
+                entities:
+                  - entity: sensor.bender_power_l1
+                    name: L1
+                  - entity: sensor.bender_power_l2
+                    name: L2
+                  - entity: sensor.bender_power_l3
+                    name: L3
+
+              # --- HISTORY GRAFIEK ---
+              - type: history-graph
+                title: "📈 Vermogen Historie"
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.bender_totalpower
+                    name: Totaal Vermogen
+
+          # ==================== KOLOM 3: DAGELIJKSE INSTELLINGEN ====================
+          - type: vertical-stack
+            cards:
+              # --- DYNAMIC OPERATIONAL CONTROLS ---
+              - type: conditional
+                conditions:
+                  - entity: input_select.bender_charging_strategy
+                    state: "Dynamic"
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: entities
+                      title: "💰 Dynamic Parameters"
+                      entities:
+                        - entity: input_datetime.bender_strategy_departure_time
+                          name: Vertrektijd
+                          icon: mdi:clock-end
+                        - entity: input_number.bender_strategy_required_kwh
+                          name: Benodigde energie (kWh)
+                          icon: mdi:battery-charging
+                    - type: entities
+                      title: "📊 Planning"
+                      entities:
+                        - entity: sensor.bender_dynamic_hours_needed
+                          name: Uren nodig om te laden
+                        - entity: sensor.bender_dynamic_hours_until_departure
+                          name: Uren tot vertrek
+                        - entity: sensor.bender_dynamic_latest_start
+                          name: Uiterste starttijd
+                        - entity: input_datetime.bender_strategy_dynamic_start
+                          name: Geplande laadstart
+                        - entity: input_boolean.bender_strategy_dynamic_must_charge
+                          name: Deadline laden actief
+                    - type: entities
+                      title: "💶 Huidige Stroomprijs"
+                      entities:
+                        - entity: sensor.zonneplan_current_electricity_tariff
+                          name: Huidige tarief
+
+              # --- CHARGEPV STATUS ---
+              - type: conditional
+                conditions:
+                  - entity: input_select.bender_charging_strategy
+                    state: "ChargePV"
+                card:
+                  type: entities
+                  title: "☀️ ChargePV Status"
+                  entities:
+                    - entity: sensor.p1_meter_power
+                      name: P1 Meter Vermogen
+                    - entity: sensor.bender_pv_available_power
+                      name: Beschikbaar PV Overschot
+
+  # ==============================================================================
+  # VIEW 2: INSTELLINGEN (Configuratie)
+  # ==============================================================================
+  - title: Instellingen
+    path: instellingen
+    icon: mdi:cog
+    panel: true
+    cards:
+      - type: horizontal-stack
+        cards:
+          # ==================== KOLOM 1: ALGEMEEN & STRATEGIE CONFIG ====================
+          - type: vertical-stack
+            cards:
+              - type: entities
+                title: "Algemene Instellingen"
+                entities:
+                  - type: section
+                    label: "Limieten"
+                  - entity: input_number.bender_strategy_max_current
+                    name: Max laadstroom (Alle strategieën)
+                    icon: mdi:current-ac
+              
+              - type: entities
+                title: "Strategie Configuratie"
+                entities:
+                  - type: section
+                    label: "ChargePV"
+                  - entity: input_number.bender_strategy_pv_min_surplus
+                    name: Min. overschot voor start laden
+                    icon: mdi:solar-power
+
+          # ==================== KOLOM 2: LOAD BALANCER ====================
+          - type: vertical-stack
+            cards:
+              - type: entities
+                title: "⚖️ Load Balancer (Max 3x25A)"
+                show_header_toggle: false
+                entities:
+                  - entity: input_boolean.bender_loadbalancer_enabled
+                    name: Actief
+                  - type: conditional
+                    conditions:
+                      - entity: input_boolean.bender_loadbalancer_enabled
+                        state: "on"
+                    row:
+                      entity: input_number.bender_loadbalancer_margin
+                  - type: section
+                    label: "Status"
+                  - entity: sensor.bender_house_consumption_excl_charger
+                    name: Huisverbruik (excl. lader)
+                    icon: mdi:home-lightning-bolt
+                  - entity: sensor.bender_loadbalancer_available_power
+                    name: Beschikbaar voor lader
+                    icon: mdi:battery-charging-high
+                  - entity: sensor.bender_loadbalancer_available_current
+                    name: Beschikbare stroom (per fase)
+                    icon: mdi:current-ac
+                  - type: section
+                    label: "Hardware Settings"
+                  - entity: input_number.bender_house_max_power
+                    name: Huisaansluiting Capaciteit
+
+          # ==================== KOLOM 3: ONDERHOUD / MANUAL ====================
+          - type: vertical-stack
+            cards:
+              - type: entities
+                title: "🛡️ Safe Current (Fallback)"
+                entities:
+                  - entity: sensor.bender_safecurrent
+                    name: Huidige Safe Current
+              - type: horizontal-stack
+                cards:
+                  - type: button
+                    name: "6A"
+                    tap_action:
+                      action: call-service
+                      service: script.set_bender_safe_current
+                      data:
+                        current: 6
+                  - type: button
+                    name: "10A"
+                    tap_action:
+                      action: call-service
+                      service: script.set_bender_safe_current
+                      data:
+                        current: 10
+                  - type: button
+                    name: "16A"
+                    tap_action:
+                      action: call-service
+                      service: script.set_bender_safe_current
+                      data:
+                        current: 16

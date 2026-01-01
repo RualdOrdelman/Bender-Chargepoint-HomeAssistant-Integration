@@ -1,0 +1,104 @@
+[
+    {
+        "id": "bender_strategy_direct_tab",
+        "type": "tab",
+        "label": "Bender Strategy Direct",
+        "disabled": false,
+        "info": "Direct strategy: Immediate charging at max power"
+    },
+    {
+        "id": "bender_direct_group",
+        "type": "group",
+        "z": "bender_strategy_direct_tab",
+        "name": "Direct Strategy - Immediate Max Charging",
+        "style": {
+            "label": true
+        },
+        "nodes": [
+            "bender_direct_start_link",
+            "bender_direct_start",
+            "bender_direct_status"
+        ],
+        "x": 14,
+        "y": 19,
+        "w": 572,
+        "h": 122
+    },
+    {
+        "id": "bender_direct_start_link",
+        "type": "link in",
+        "z": "bender_strategy_direct_tab",
+        "g": "bender_direct_group",
+        "name": "Direct Start",
+        "links": [
+            "bender_master_link_direct"
+        ],
+        "x": 65,
+        "y": 80,
+        "wires": [
+            [
+                "bender_direct_start"
+            ]
+        ]
+    },
+    {
+        "id": "bender_direct_start",
+        "type": "api-call-service",
+        "z": "bender_strategy_direct_tab",
+        "g": "bender_direct_group",
+        "name": "Start charging (max)",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "script.bender_start_charging",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 240,
+        "y": 80,
+        "wires": [
+            [
+                "bender_direct_status"
+            ]
+        ]
+    },
+    {
+        "id": "bender_direct_status",
+        "type": "api-call-service",
+        "z": "bender_strategy_direct_tab",
+        "g": "bender_direct_group",
+        "name": "Set status",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.bender_strategy_active_status"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"Direct: Laden op max vermogen\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 440,
+        "y": 80,
+        "wires": [
+            []
+        ]
+    }
+]

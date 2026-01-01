@@ -1,0 +1,523 @@
+[
+    {
+        "id": "bender_strategy_dynamic_tab",
+        "type": "tab",
+        "label": "Bender Strategy Dynamic",
+        "disabled": false,
+        "info": "Dynamic strategy: Charges during cheapest hours with deadline fallback"
+    },
+    {
+        "id": "bender_dynamic_group",
+        "type": "group",
+        "z": "bender_strategy_dynamic_tab",
+        "name": "Dynamic Strategy - Cheapest Hours with Deadline",
+        "style": {
+            "label": true
+        },
+        "nodes": [
+            "bender_dynamic_start_link",
+            "bender_dynamic_hourly_trigger",
+            "bender_dynamic_check_active",
+            "bender_dynamic_init",
+            "bender_dynamic_get_departure",
+            "bender_dynamic_get_required_kwh",
+            "bender_dynamic_get_max_current",
+            "bender_dynamic_get_prices",
+            "bender_dynamic_calculate_schedule",
+            "bender_dynamic_update_planned_start",
+            "bender_dynamic_update_must_charge",
+            "bender_dynamic_check_should_charge",
+            "bender_dynamic_start_charge",
+            "bender_dynamic_stop_charge",
+            "bender_dynamic_status_charging",
+            "bender_dynamic_status_waiting",
+            "bender_dynamic_debug"
+        ],
+        "x": 14,
+        "y": 19,
+        "w": 1292,
+        "h": 522
+    },
+    {
+        "id": "bender_dynamic_start_link",
+        "type": "link in",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Dynamic Start",
+        "links": [
+            "bender_master_link_dynamic"
+        ],
+        "x": 65,
+        "y": 80,
+        "wires": [
+            [
+                "bender_dynamic_init"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_hourly_trigger",
+        "type": "inject",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Every hour",
+        "props": [],
+        "repeat": "",
+        "crontab": "0 * * * *",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 130,
+        "y": 180,
+        "wires": [
+            [
+                "bender_dynamic_check_active"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_check_active",
+        "type": "api-current-state",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Check if Dynamic active",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "Dynamic",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_select.bender_charging_strategy",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 330,
+        "y": 180,
+        "wires": [
+            [
+                "bender_dynamic_init"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "bender_dynamic_init",
+        "type": "function",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Init",
+        "func": "msg.dynamic = {};\nmsg.log = [];\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 190,
+        "y": 80,
+        "wires": [
+            [
+                "bender_dynamic_get_departure"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_get_departure",
+        "type": "api-current-state",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Get departure time",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_datetime.bender_strategy_departure_time",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "dynamic.departure_time",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 370,
+        "y": 80,
+        "wires": [
+            [
+                "bender_dynamic_get_required_kwh"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_get_required_kwh",
+        "type": "api-current-state",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Get required kWh",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_number.bender_strategy_required_kwh",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "dynamic.required_kwh",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 570,
+        "y": 80,
+        "wires": [
+            [
+                "bender_dynamic_get_max_current"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_get_max_current",
+        "type": "api-current-state",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Get max current",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_number.bender_strategy_max_current",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "dynamic.max_current",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 780,
+        "y": 80,
+        "wires": [
+            [
+                "bender_dynamic_get_prices"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_get_prices",
+        "type": "api-current-state",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Get Zonneplan prices",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "sensor.zonneplan_current_electricity_tariff",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "dynamic.current_tariff",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            },
+            {
+                "property": "dynamic.forecast",
+                "propertyType": "msg",
+                "value": "forecast",
+                "valueType": "entityStateAttribute"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 1000,
+        "y": 80,
+        "wires": [
+            [
+                "bender_dynamic_calculate_schedule"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_calculate_schedule",
+        "type": "function",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Calculate charging schedule",
+        "func": "const departure_str = msg.dynamic.departure_time;\nconst required_kwh = msg.dynamic.required_kwh || 0;\nconst max_current = msg.dynamic.max_current || 16;\nconst forecast = msg.dynamic.forecast || [];\n\n// Calculate charging power and hours needed\nconst voltage = 230;\nconst charging_power_kw = (max_current * 3 * voltage) / 1000;\nconst hours_needed = required_kwh > 0 ? Math.ceil(required_kwh / charging_power_kw) : 1;\n\nmsg.dynamic.hours_needed = hours_needed;\nmsg.dynamic.charging_power_kw = charging_power_kw;\n\n// Parse departure time\nlet departure_ts;\ntry {\n    departure_ts = new Date(departure_str).getTime();\n} catch (e) {\n    departure_ts = Date.now() + 24 * 60 * 60 * 1000; // Default 24h from now\n}\n\nconst now = Date.now();\nconst hours_until_departure = (departure_ts - now) / (1000 * 60 * 60);\n\nmsg.dynamic.departure_ts = departure_ts;\nmsg.dynamic.hours_until_departure = hours_until_departure;\n\n// Filter forecast to hours before departure\nconst available_hours = forecast.filter(h => {\n    const hour_ts = new Date(h.datetime || h.start_time).getTime();\n    return hour_ts >= now && hour_ts < departure_ts;\n}).map(h => ({\n    datetime: h.datetime || h.start_time,\n    timestamp: new Date(h.datetime || h.start_time).getTime(),\n    price: h.electricity_price || h.price || 0\n}));\n\n// Sort by price (cheapest first)\nconst sorted_hours = [...available_hours].sort((a, b) => a.price - b.price);\n\n// Select cheapest N hours\nconst selected_hours = sorted_hours.slice(0, hours_needed);\n\n// Sort selected hours by time (earliest first)\nconst charging_schedule = selected_hours.sort((a, b) => a.timestamp - b.timestamp);\n\nmsg.dynamic.available_hours = available_hours.length;\nmsg.dynamic.charging_schedule = charging_schedule;\n\n// Determine if we should charge NOW\nconst current_hour_start = new Date();\ncurrent_hour_start.setMinutes(0, 0, 0);\nconst current_hour_ts = current_hour_start.getTime();\n\nconst is_cheap_hour = charging_schedule.some(h => {\n    const h_ts = new Date(h.datetime).getTime();\n    return Math.abs(h_ts - current_hour_ts) < 60 * 60 * 1000; // Within same hour\n});\n\n// Calculate latest start time (deadline fallback)\nconst latest_start_ts = departure_ts - (hours_needed * 60 * 60 * 1000);\nconst must_start_now = now >= latest_start_ts;\n\nmsg.dynamic.is_cheap_hour = is_cheap_hour;\nmsg.dynamic.must_start_now = must_start_now;\nmsg.dynamic.should_charge = is_cheap_hour || must_start_now;\nmsg.dynamic.latest_start = new Date(latest_start_ts).toISOString();\n\n// Calculate planned start (first cheap hour or latest start)\nlet planned_start_ts;\nif (charging_schedule.length > 0) {\n    planned_start_ts = new Date(charging_schedule[0].datetime).getTime();\n} else {\n    planned_start_ts = latest_start_ts;\n}\nif (must_start_now) {\n    planned_start_ts = Math.min(planned_start_ts, latest_start_ts);\n}\nmsg.dynamic.planned_start = new Date(planned_start_ts).toISOString();\n\nmsg.log.push(`Hours needed: ${hours_needed}, Until departure: ${hours_until_departure.toFixed(1)}h`);\nmsg.log.push(`Available hours: ${available_hours.length}, Selected: ${charging_schedule.length}`);\nmsg.log.push(`Is cheap hour: ${is_cheap_hour}, Must start: ${must_start_now}`);\nmsg.log.push(`Should charge: ${msg.dynamic.should_charge}`);\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 280,
+        "y": 260,
+        "wires": [
+            [
+                "bender_dynamic_update_planned_start",
+                "bender_dynamic_debug"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_update_planned_start",
+        "type": "api-call-service",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Set planned start",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_datetime.set_datetime",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_datetime.bender_strategy_dynamic_start"
+        ],
+        "labelId": [],
+        "data": "{\"datetime\": \"{{dynamic.planned_start}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 530,
+        "y": 260,
+        "wires": [
+            [
+                "bender_dynamic_update_must_charge"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_update_must_charge",
+        "type": "api-call-service",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Set must_charge flag",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_boolean.{{#dynamic.must_start_now}}turn_on{{/dynamic.must_start_now}}{{^dynamic.must_start_now}}turn_off{{/dynamic.must_start_now}}",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_boolean.bender_strategy_dynamic_must_charge"
+        ],
+        "labelId": [],
+        "data": "",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 780,
+        "y": 260,
+        "wires": [
+            [
+                "bender_dynamic_check_should_charge"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_check_should_charge",
+        "type": "switch",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Should charge?",
+        "property": "dynamic.should_charge",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "true"
+            },
+            {
+                "t": "false"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 1000,
+        "y": 260,
+        "wires": [
+            [
+                "bender_dynamic_start_charge"
+            ],
+            [
+                "bender_dynamic_stop_charge"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_start_charge",
+        "type": "api-call-service",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Start charging",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "script.bender_start_charging",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 360,
+        "y": 360,
+        "wires": [
+            [
+                "bender_dynamic_status_charging"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_stop_charge",
+        "type": "api-call-service",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Stop charging",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "script.bender_stop_charging",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 360,
+        "y": 440,
+        "wires": [
+            [
+                "bender_dynamic_status_waiting"
+            ]
+        ]
+    },
+    {
+        "id": "bender_dynamic_status_charging",
+        "type": "api-call-service",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Status: charging",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.bender_strategy_active_status"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"Dynamic: Laden ({{#dynamic.must_start_now}}deadline{{/dynamic.must_start_now}}{{^dynamic.must_start_now}}goedkoopste uur{{/dynamic.must_start_now}})\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 600,
+        "y": 360,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bender_dynamic_status_waiting",
+        "type": "api-call-service",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Status: waiting",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.bender_strategy_active_status"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"Dynamic: Wacht op goedkoop tarief (start: {{dynamic.planned_start}})\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 600,
+        "y": 440,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bender_dynamic_debug",
+        "type": "debug",
+        "z": "bender_strategy_dynamic_tab",
+        "g": "bender_dynamic_group",
+        "name": "Dynamic log",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "dynamic",
+        "targetType": "msg",
+        "statusVal": "dynamic.should_charge",
+        "statusType": "msg",
+        "x": 530,
+        "y": 180,
+        "wires": []
+    }
+]

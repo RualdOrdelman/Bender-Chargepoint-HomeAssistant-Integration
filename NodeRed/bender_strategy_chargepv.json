@@ -1,0 +1,582 @@
+[
+    {
+        "id": "bender_strategy_chargepv_tab",
+        "type": "tab",
+        "label": "Bender Strategy ChargePV",
+        "disabled": false,
+        "info": "ChargePV strategy: Charges using solar surplus (negative P1 meter value)"
+    },
+    {
+        "id": "bender_chargepv_group",
+        "type": "group",
+        "z": "bender_strategy_chargepv_tab",
+        "name": "ChargePV Strategy - Solar Surplus Charging",
+        "style": {
+            "label": true
+        },
+        "nodes": [
+            "bender_chargepv_start_link",
+            "bender_chargepv_p1_trigger",
+            "bender_chargepv_init",
+            "bender_chargepv_get_settings",
+            "bender_chargepv_get_max_current",
+            "bender_chargepv_get_p1",
+            "bender_chargepv_get_voltages",
+            "bender_chargepv_get_v2",
+            "bender_chargepv_get_v3",
+            "bender_chargepv_calculate",
+            "bender_chargepv_check_minimum",
+            "bender_chargepv_check_strategy",
+            "bender_chargepv_apply_charge",
+            "bender_chargepv_stop_charge",
+            "bender_chargepv_update_status_on",
+            "bender_chargepv_update_status_off",
+            "bender_chargepv_debug",
+            "bender_chargepv_rate_limit"
+        ],
+        "x": 14,
+        "y": 19,
+        "w": 1192,
+        "h": 422
+    },
+    {
+        "id": "bender_chargepv_start_link",
+        "type": "link in",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "ChargePV Start",
+        "links": [
+            "bender_master_link_chargepv"
+        ],
+        "x": 65,
+        "y": 80,
+        "wires": [
+            [
+                "bender_chargepv_init"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_p1_trigger",
+        "type": "server-state-changed",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "P1 meter changed",
+        "server": "b9d10367867e38e6",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "sensor.p1_meter_power"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "num",
+        "ifState": "",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": true,
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": true,
+        "ignoreCurrentStateUnavailable": true,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "x": 150,
+        "y": 180,
+        "wires": [
+            [
+                "bender_chargepv_rate_limit"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_rate_limit",
+        "type": "delay",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Rate limit 10s",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "10",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": true,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 350,
+        "y": 180,
+        "wires": [
+            [
+                "bender_chargepv_check_strategy"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_check_strategy",
+        "type": "api-current-state",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Check if ChargePV active",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "ChargePV",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_select.bender_charging_strategy",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 550,
+        "y": 180,
+        "wires": [
+            [
+                "bender_chargepv_init"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "bender_chargepv_init",
+        "type": "function",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Init",
+        "func": "msg.chargepv = {};\nmsg.log = [];\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 190,
+        "y": 80,
+        "wires": [
+            [
+                "bender_chargepv_get_settings"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_get_settings",
+        "type": "api-current-state",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Get min surplus",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_number.bender_strategy_pv_min_surplus",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "chargepv.min_surplus",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 360,
+        "y": 80,
+        "wires": [
+            [
+                "bender_chargepv_get_max_current"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_get_max_current",
+        "type": "api-current-state",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Get max current",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_number.bender_strategy_max_current",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "chargepv.max_current",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 560,
+        "y": 80,
+        "wires": [
+            [
+                "bender_chargepv_get_p1"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_get_p1",
+        "type": "api-current-state",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Get P1 power",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "sensor.p1_meter_power",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "chargepv.p1_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 760,
+        "y": 80,
+        "wires": [
+            [
+                "bender_chargepv_get_voltages"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_get_voltages",
+        "type": "api-current-state",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Get voltages",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "sensor.dsmr_reading_phase_voltage_l1",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "chargepv.voltage_l1",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 950,
+        "y": 80,
+        "wires": [
+            [
+                "bender_chargepv_get_v2"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_get_v2",
+        "type": "api-current-state",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Get V L2",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "sensor.dsmr_reading_phase_voltage_l2",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "chargepv.voltage_l2",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 260,
+        "y": 260,
+        "wires": [
+            [
+                "bender_chargepv_get_v3"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_get_v3",
+        "type": "api-current-state",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Get V L3",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "sensor.dsmr_reading_phase_voltage_l3",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "chargepv.voltage_l3",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 440,
+        "y": 260,
+        "wires": [
+            [
+                "bender_chargepv_calculate"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_calculate",
+        "type": "function",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Calculate charging current",
+        "func": "const p1_power = msg.chargepv.p1_power || 0;\nconst min_surplus = msg.chargepv.min_surplus || 4140;\nconst max_current = msg.chargepv.max_current || 16;\n\n// Get voltages with fallback to 230V\nconst v1 = msg.chargepv.voltage_l1 || 230;\nconst v2 = msg.chargepv.voltage_l2 || 230;\nconst v3 = msg.chargepv.voltage_l3 || 230;\nconst avg_voltage = (v1 + v2 + v3) / 3;\n\n// Available power is negative P1 (exporting)\nconst available_power = p1_power < 0 ? Math.abs(p1_power) : 0;\n\n// Power per phase\nconst power_per_phase = available_power / 3;\n\n// Current per phase: P = U * I -> I = P / U\nlet current_per_phase = power_per_phase / avg_voltage;\n\n// Cap at max current\ncurrent_per_phase = Math.min(current_per_phase, max_current);\n\n// Round to nearest integer\ncurrent_per_phase = Math.round(current_per_phase);\n\nmsg.chargepv.available_power = available_power;\nmsg.chargepv.current_per_phase = current_per_phase;\nmsg.chargepv.avg_voltage = avg_voltage;\nmsg.chargepv.should_charge = available_power >= min_surplus && current_per_phase >= 6;\n\nmsg.log.push(`P1: ${p1_power}W, Available: ${available_power}W`);\nmsg.log.push(`Min surplus: ${min_surplus}W, Calculated current: ${current_per_phase}A`);\nmsg.log.push(`Should charge: ${msg.chargepv.should_charge}`);\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 670,
+        "y": 260,
+        "wires": [
+            [
+                "bender_chargepv_check_minimum",
+                "bender_chargepv_debug"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_check_minimum",
+        "type": "switch",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Enough to charge?",
+        "property": "chargepv.should_charge",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "true"
+            },
+            {
+                "t": "false"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 910,
+        "y": 260,
+        "wires": [
+            [
+                "bender_chargepv_apply_charge"
+            ],
+            [
+                "bender_chargepv_stop_charge"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_apply_charge",
+        "type": "api-call-service",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Set DLM limits",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "script.set_bender_dlm_limits",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "{\"l1\": \"{{chargepv.current_per_phase}}\", \"l2\": \"{{chargepv.current_per_phase}}\", \"l3\": \"{{chargepv.current_per_phase}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 340,
+        "y": 340,
+        "wires": [
+            [
+                "bender_chargepv_update_status_on"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_stop_charge",
+        "type": "api-call-service",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Stop charging",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "script.bender_stop_charging",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 340,
+        "y": 400,
+        "wires": [
+            [
+                "bender_chargepv_update_status_off"
+            ]
+        ]
+    },
+    {
+        "id": "bender_chargepv_update_status_on",
+        "type": "api-call-service",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Status: charging",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.bender_strategy_active_status"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"ChargePV: {{chargepv.current_per_phase}}A ({{chargepv.available_power}}W overschot)\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 580,
+        "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bender_chargepv_update_status_off",
+        "type": "api-call-service",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "Status: waiting",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.bender_strategy_active_status"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"ChargePV: Wacht op voldoende overschot ({{chargepv.available_power}}W)\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 580,
+        "y": 400,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bender_chargepv_debug",
+        "type": "debug",
+        "z": "bender_strategy_chargepv_tab",
+        "g": "bender_chargepv_group",
+        "name": "ChargePV log",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "chargepv",
+        "targetType": "msg",
+        "statusVal": "chargepv.current_per_phase",
+        "statusType": "msg",
+        "x": 920,
+        "y": 340,
+        "wires": []
+    }
+]

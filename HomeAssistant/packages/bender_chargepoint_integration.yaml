@@ -1,0 +1,575 @@
+modbus:
+  - name: modbus_hub
+    type: tcp
+    host: 192.168.4.191
+    port: 502
+    delay: 0
+    message_wait_milliseconds: 30
+    timeout: 10
+    sensors:
+
+    #--------OMCCI / Open Modbus Dataset--------
+      # Charge Point Status (R)
+      - name: "Bender_ChargePointState"
+        slave: 1
+        address: 104
+        input_type: holding
+        data_type: uint16
+        scan_interval: 10
+      # Safe Current (R/W) - 131
+      - name: "Bender_SafeCurrent"
+        slave: 1
+        address: 131
+        input_type: holding
+        data_type: uint16
+        unit_of_measurement: "A"
+        scan_interval: 30
+      # Power per phase (R) - 32-bit registers
+      - name: "Bender_Power_L1"
+        slave: 1
+        address: 206
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "W"
+        device_class: power
+        scan_interval: 10
+      - name: "Bender_Power_L2"
+        slave: 1
+        address: 208
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "W"
+        device_class: power
+        scan_interval: 10
+      - name: "Bender_Power_L3"
+        slave: 1
+        address: 210
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "W"
+        device_class: power
+        scan_interval: 10
+      # Current per phase (R) - 32-bit, in mA
+      - name: "Bender_Current_L1"
+        slave: 1
+        address: 212
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "mA"
+        device_class: current
+        scan_interval: 10
+      - name: "Bender_Current_L2"
+        slave: 1
+        address: 214
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "mA"
+        device_class: current
+        scan_interval: 10
+      - name: "Bender_Current_L3"
+        slave: 1
+        address: 216
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "mA"
+        device_class: current
+        scan_interval: 10
+      # Total Energy & Power (R) - 32-bit
+      - name: "Bender_TotalEnergy"
+        slave: 1
+        address: 218
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "Wh"
+        device_class: energy
+        state_class: total_increasing
+        scan_interval: 60
+      - name: "Bender_TotalPower"
+        slave: 1
+        address: 220
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "W"
+        device_class: power
+        scan_interval: 10
+      # DLM Limits (R/W)
+      - name: "Bender_DLM_Limit_L1"
+        slave: 1
+        address: 613
+        input_type: holding
+        data_type: uint16
+        unit_of_measurement: "A"
+        scan_interval: 30
+      - name: "Bender_DLM_Limit_L2"
+        slave: 1
+        address: 614
+        input_type: holding
+        data_type: uint16
+        unit_of_measurement: "A"
+        scan_interval: 30
+      - name: "Bender_DLM_Limit_L3"
+        slave: 1
+        address: 615
+        input_type: holding
+        data_type: uint16
+        unit_of_measurement: "A"
+        scan_interval: 30
+
+###########################################################################################################
+# INPUT NUMBER
+###########################################################################################################
+input_number:
+  bender_dlm_slider:
+    name: DLM Limit
+    min: 6
+    max: 16
+    step: 1
+    unit_of_measurement: A
+    icon: mdi:current-ac
+
+  bender_strategy_required_kwh:
+    name: Benodigde energie
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "kWh"
+    icon: mdi:battery-charging
+    mode: box
+
+  bender_strategy_max_current:
+    name: Max laadstroom
+    min: 6
+    max: 16
+    step: 1
+    initial: 16
+    unit_of_measurement: "A"
+    icon: mdi:current-ac
+    mode: slider
+
+  bender_strategy_pv_min_surplus:
+    name: Min. overschot voor laden
+    min: 1000
+    max: 11000
+    step: 100
+    initial: 4140
+    unit_of_measurement: "W"
+    icon: mdi:solar-power
+    mode: slider
+
+  bender_strategy_pv_calculated_current:
+    name: PV Berekende stroom
+    min: 0
+    max: 32
+    step: 0.1
+    unit_of_measurement: "A"
+    icon: mdi:current-ac
+    mode: box
+
+  # Load Balancer Settings
+  bender_loadbalancer_margin:
+    name: Load Balancer Veiligheidsmarge
+    min: 0
+    max: 5000
+    step: 100
+    initial: 1000
+    unit_of_measurement: "W"
+    icon: mdi:shield-alert
+    mode: slider
+
+  bender_house_max_power:
+    name: Huisaansluiting Max Vermogen
+    min: 5000
+    max: 25000
+    step: 250
+    initial: 17250
+    unit_of_measurement: "W"
+    icon: mdi:home-lightning-bolt
+    mode: box
+
+###########################################################################################################
+# INPUT SELECT
+###########################################################################################################
+input_select:
+  bender_charging_strategy:
+    name: Laadpaal Strategie
+    options:
+      - Uit
+      - Direct
+      - Manual
+      - ChargePV
+      - Dynamic
+    icon: mdi:ev-station
+
+###########################################################################################################
+# INPUT DATETIME
+###########################################################################################################
+input_datetime:
+  bender_strategy_departure_time:
+    name: Vertrektijd
+    has_date: true
+    has_time: true
+    icon: mdi:clock-end
+
+  bender_strategy_dynamic_start:
+    name: Geplande laadstart
+    has_date: true
+    has_time: true
+    icon: mdi:clock-start
+
+###########################################################################################################
+# INPUT TEXT
+###########################################################################################################
+input_text:
+  bender_strategy_active_status:
+    name: Strategie status
+    icon: mdi:information
+    max: 255
+
+###########################################################################################################
+# INPUT BOOLEAN
+###########################################################################################################
+input_boolean:
+  bender_strategy_dynamic_must_charge:
+    name: Dynamic moet nu laden (deadline)
+    icon: mdi:alert-circle
+
+  bender_loadbalancer_enabled:
+    name: Load Balancer Actief
+    icon: mdi:scale-balance
+
+###########################################################################################################
+# TEMPLATE SENSORS
+###########################################################################################################
+template:
+  - sensor:
+      - name: "Bender_Charge_Point_Status"
+        state: >
+          {% set state = states('sensor.bender_chargepointstate') | int(-1) %}
+          {% if state == 0 %}Available
+          {% elif state == 1 %}Occupied
+          {% elif state == 2 %}Charging
+          {% elif state == 3 %}SuspendedEV
+          {% elif state == 4 %}SuspendedEVSE
+          {% elif state == 5 %}Finishing
+          {% elif state == 6 %}Reserved
+          {% elif state == 7 %}Unavailable
+          {% elif state == 8 %}Faulted
+          {% else %}Unknown
+          {% endif %}
+
+      # Available PV surplus power (negative P1 = exporting = available)
+      - name: "Bender PV Available Power"
+        unique_id: "bender_pv_available_power"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set p1_power = states('sensor.p1_meter_power') | float(0) %}
+          {% if p1_power < 0 %}
+            {{ (p1_power * -1) | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+
+      # Current per phase based on available power (W / 3 / V = A per phase)
+      - name: "Bender PV Available Current Per Phase"
+        unique_id: "bender_pv_available_current_per_phase"
+        unit_of_measurement: "A"
+        device_class: current
+        state: >
+          {% set available_power = states('sensor.bender_pv_available_power') | float(0) %}
+          {% set voltage_l1 = states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
+          {% set voltage_l2 = states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
+          {% set voltage_l3 = states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
+          {% set avg_voltage = (voltage_l1 + voltage_l2 + voltage_l3) / 3 %}
+          {% set power_per_phase = available_power / 3 %}
+          {% set current_per_phase = power_per_phase / avg_voltage %}
+          {{ current_per_phase | round(1) }}
+
+      # -------------------------------------------------------------------------
+      # LOAD BALANCER SENSORS
+      # -------------------------------------------------------------------------
+
+      # Calculated "House Only" consumption (P1 Total - Charger Total)
+      - name: "Bender House Consumption Excl Charger"
+        unique_id: "bender_house_consumption_excl_charger"
+        unit_of_measurement: "W"
+        device_class: power
+        state: >
+          {% set p1_l1 = states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) %}
+          {% set p1_l2 = states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) %}
+          {% set p1_l3 = states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) %}
+          {% set p1_total = p1_l1 + p1_l2 + p1_l3 %}
+          {% set charger_power = states('sensor.bender_charging_power_total') | float(0) %}
+          {{ (p1_total - charger_power) | round(0) }}
+
+      # Available Current per phase (Bottleneck Calculation)
+      # Calculates available amps for each phase: (Max - Margin - (Grid - Charger))
+      # Returns the minimum available amps across all 3 phases (capped at 16A)
+      - name: "Bender Loadbalancer Available Current"
+        unique_id: "bender_loadbalancer_available_current"
+        unit_of_measurement: "A"
+        device_class: current
+        state: >
+          {# --- Configuration --- #}
+          {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
+          {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
+          
+          {# Convert Power Config to Amps per phase (Assuming 3-phase and 230V) #}
+          {# 17250W / 3 / 230V = 25A #}
+          {% set max_amps = (max_power / 3) / 230 %}
+          {% set margin_amps = (margin_power / 3) / 230 %}
+          {% set limit_amps = max_amps - margin_amps %}
+          
+          {# --- Phase 1 --- #}
+          {% set v_l1 = states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
+          {% set grid_l1_w = states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) %}
+          {% set grid_l1_a = grid_l1_w / v_l1 %}
+          {% set ch_l1_ma = states('sensor.bender_current_l1') | float(0) %}
+          {% set ch_l1_a = ch_l1_ma / 1000 %}
+          {# Available = Limit - (Grid load without charger) = Limit - (Grid - Charger) #}
+          {% set avail_l1 = limit_amps - grid_l1_a + ch_l1_a %}
+          
+          {# --- Phase 2 --- #}
+          {% set v_l2 = states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
+          {% set grid_l2_w = states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) %}
+          {% set grid_l2_a = grid_l2_w / v_l2 %}
+          {% set ch_l2_ma = states('sensor.bender_current_l2') | float(0) %}
+          {% set ch_l2_a = ch_l2_ma / 1000 %}
+          {% set avail_l2 = limit_amps - grid_l2_a + ch_l2_a %}
+          
+          {# --- Phase 3 --- #}
+          {% set v_l3 = states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
+          {% set grid_l3_w = states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) %}
+          {% set grid_l3_a = grid_l3_w / v_l3 %}
+          {% set ch_l3_ma = states('sensor.bender_current_l3') | float(0) %}
+          {% set ch_l3_a = ch_l3_ma / 1000 %}
+          {% set avail_l3 = limit_amps - grid_l3_a + ch_l3_a %}
+          
+          {# --- Result --- #}
+          {# Find the phase with the least headroom (bottleneck) #}
+          {% set bottleneck = [avail_l1, avail_l2, avail_l3] | min %}
+          
+          {# Apply absolute cap of 16A (Charging Strategy Max fallback) and ensure non-negative #}
+          {{ [bottleneck, 16] | min | max(0) | round(1) }}
+
+      # Total Power available for Charger (Visual Only)
+      # Based on the bottleneck current * 3 phases * 230V
+      - name: "Bender Loadbalancer Available Power"
+        unique_id: "bender_loadbalancer_available_power"
+        unit_of_measurement: "W"
+        device_class: power
+        state: >
+          {% set available_current = states('sensor.bender_loadbalancer_available_current') | float(0) %}
+          {{ (available_current * 3 * 230) | round(0) }}
+
+      # Hours needed to charge the required kWh at max current
+      - name: "Bender Dynamic Hours Needed"
+        unique_id: "bender_dynamic_hours_needed"
+        unit_of_measurement: "h"
+        icon: mdi:clock-outline
+        state: >
+          {% set required_kwh = states('input_number.bender_strategy_required_kwh') | float(0) %}
+          {% set max_current = states('input_number.bender_strategy_max_current') | float(16) %}
+          {% set voltage = 230 %}
+          {% set charging_power_kw = (max_current * 3 * voltage) / 1000 %}
+          {% if charging_power_kw > 0 %}
+            {{ (required_kwh / charging_power_kw) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+
+      # Time remaining until departure
+      - name: "Bender Dynamic Hours Until Departure"
+        unique_id: "bender_dynamic_hours_until_departure"
+        unit_of_measurement: "h"
+        icon: mdi:clock-end
+        state: >
+          {% set departure = states('input_datetime.bender_strategy_departure_time') %}
+          {% if departure not in ['unknown', 'unavailable', ''] %}
+            {% set departure_ts = as_timestamp(departure) %}
+            {% set now_ts = as_timestamp(now()) %}
+            {% set hours_remaining = (departure_ts - now_ts) / 3600 %}
+            {{ [hours_remaining, 0] | max | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+
+      # Latest start time to meet departure deadline
+      - name: "Bender Dynamic Latest Start"
+        unique_id: "bender_dynamic_latest_start"
+        icon: mdi:clock-alert
+        state: >
+          {% set hours_needed = states('sensor.bender_dynamic_hours_needed') | float(0) %}
+          {% set departure = states('input_datetime.bender_strategy_departure_time') %}
+          {% if departure not in ['unknown', 'unavailable', ''] and hours_needed > 0 %}
+            {% set departure_ts = as_timestamp(departure) %}
+            {% set start_ts = departure_ts - (hours_needed * 3600) %}
+            {{ start_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}
+          {% else %}
+            unknown
+          {% endif %}
+
+      # Active strategy display
+      - name: "Bender Strategy Active"
+        unique_id: "bender_strategy_active"
+        icon: mdi:ev-station
+        state: >
+          {{ states('input_select.bender_charging_strategy') }}
+
+      # Total current charging power
+      - name: "Bender Charging Power Total"
+        unique_id: "bender_charging_power_total"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set l1 = states('sensor.bender_power_l1') | float(0) %}
+          {% set l2 = states('sensor.bender_power_l2') | float(0) %}
+          {% set l3 = states('sensor.bender_power_l3') | float(0) %}
+          {{ (l1 + l2 + l3) | round(0) }}
+
+  # Binary sensor for actual charging status based on real power reading
+  - binary_sensor:
+      - name: "Bender Charging Active"
+        unique_id: "bender_charging_active"
+        icon: mdi:ev-station
+        device_class: power
+        state: >
+          {{ states('sensor.bender_totalpower') | float(0) > 0 }}
+
+###########################################################################################################
+# SCRIPTS
+###########################################################################################################
+script:
+  bender_remote_stop:
+    alias: "Bender Remote Stop"
+    icon: mdi:stop-circle
+    sequence:
+      - service: modbus.write_register
+        data:
+          hub: modbus_hub
+          slave: 1
+          address: 1110
+          value: [21061, 19791, 21573, 24403, 21583, 20480, 0, 0, 0, 0]
+
+  set_bender_safe_current:
+    alias: "Set Bender Safe Current"
+    sequence:
+      - service: modbus.write_register
+        data:
+          hub: modbus_hub
+          slave: 1
+          address: 131
+          value: "{{ current | int }}"
+
+  set_bender_dlm_limits:
+    alias: "Set Bender DLM Limits"
+    sequence:
+      - service: modbus.write_register
+        data:
+          hub: modbus_hub
+          slave: 1
+          address: 613
+          value: "{{ l1 | int }}"
+      - service: modbus.write_register
+        data:
+          hub: modbus_hub
+          slave: 1
+          address: 614
+          value: "{{ l2 | int }}"
+      - service: modbus.write_register
+        data:
+          hub: modbus_hub
+          slave: 1
+          address: 615
+          value: "{{ l3 | int }}"
+
+  bender_start_charging:
+    alias: "Bender Start Laden (Max)"
+    icon: mdi:play-circle
+    sequence:
+      - variables:
+          max_config: "{{ states('input_number.bender_strategy_max_current') | int(16) }}"
+          lb_enabled: "{{ is_state('input_boolean.bender_loadbalancer_enabled', 'on') }}"
+          lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(16) }}"
+          
+          # Calculate final current:
+          # If LB enabled: min(max_config, lb_limit, 16)
+          # If LB disabled: min(max_config, 16)
+          final_current: >
+            {% set limit = 16 %}
+            {% if lb_enabled %}
+              {% set val = [max_config, lb_limit, limit] | min | int %}
+            {% else %}
+              {% set val = [max_config, limit] | min | int %}
+            {% endif %}
+            {{ 0 if val < 6 else val }}
+
+      - service: script.set_bender_dlm_limits
+        data:
+          l1: "{{ final_current }}"
+          l2: "{{ final_current }}"
+          l3: "{{ final_current }}"
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.bender_strategy_active_status
+        data:
+          value: "Laden op {{ final_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})"
+
+  bender_stop_charging:
+    alias: "Bender Stop Laden"
+    icon: mdi:stop-circle
+    sequence:
+      - service: script.set_bender_dlm_limits
+        data:
+          l1: 0
+          l2: 0
+          l3: 0
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.bender_strategy_active_status
+        data:
+          value: "Laden gestopt"
+
+  bender_set_charging_current:
+    alias: "Bender Stel Laadstroom In"
+    icon: mdi:current-ac
+    fields:
+      current:
+        description: "Laadstroom per fase in Ampère"
+        example: 10
+    sequence:
+      - variables:
+          requested_current: "{{ current | int }}"
+          lb_enabled: "{{ is_state('input_boolean.bender_loadbalancer_enabled', 'on') }}"
+          lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(16) }}"
+          
+          # Calculate safe current:
+          # If LB enabled: min(requested, lb_limit, 16)
+          # If LB disabled: min(requested, 16)
+          safe_current: >
+            {% set limit = 16 %}
+            {% if lb_enabled %}
+              {{ [requested_current, lb_limit, limit] | min | int }}
+            {% else %}
+              {{ [requested_current, limit] | min | int }}
+            {% endif %}
+
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ safe_current >= 6 }}"
+            sequence:
+              - service: script.set_bender_dlm_limits
+                data:
+                  l1: "{{ safe_current }}"
+                  l2: "{{ safe_current }}"
+                  l3: "{{ safe_current }}"
+              - service: input_text.set_value
+                target:
+                  entity_id: input_text.bender_strategy_active_status
+                data:
+                  value: "Laden op {{ safe_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})"
+        default:
+          - service: script.bender_stop_charging

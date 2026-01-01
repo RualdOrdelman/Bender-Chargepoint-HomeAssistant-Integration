@@ -1,0 +1,261 @@
+[
+    {
+        "id": "bender_strategy_master",
+        "type": "tab",
+        "label": "Bender Strategy Master",
+        "disabled": false,
+        "info": "Master switch for Bender chargepoint strategies.\nRoutes to appropriate strategy flow based on input_select.bender_charging_strategy"
+    },
+    {
+        "id": "bender_master_group",
+        "type": "group",
+        "z": "bender_strategy_master",
+        "name": "Strategy Master Switch",
+        "style": {
+            "label": true
+        },
+        "nodes": [
+            "bender_master_trigger",
+            "bender_master_init",
+            "bender_master_switch",
+            "bender_master_link_uit",
+            "bender_master_link_direct",
+            "bender_master_link_chargepv",
+            "bender_master_link_dynamic",
+            "bender_master_debug"
+        ],
+        "x": 14,
+        "y": 19,
+        "w": 892,
+        "h": 322
+    },
+    {
+        "id": "bender_master_trigger",
+        "type": "server-state-changed",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "Strategy changed",
+        "server": "b9d10367867e38e6",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "input_select.bender_charging_strategy"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": true,
+        "stateType": "str",
+        "ifState": "",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": true,
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "x": 130,
+        "y": 80,
+        "wires": [
+            [
+                "bender_master_init"
+            ]
+        ]
+    },
+    {
+        "id": "bender_master_init",
+        "type": "function",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "Init",
+        "func": "msg.strategy = msg.payload;\nmsg.log = [];\nmsg.log.push(`Strategy changed to: ${msg.strategy}`);\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 290,
+        "y": 80,
+        "wires": [
+            [
+                "bender_master_switch",
+                "bender_master_debug"
+            ]
+        ]
+    },
+    {
+        "id": "bender_master_switch",
+        "type": "switch",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "Route strategy",
+        "property": "strategy",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "Uit",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "Direct",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "Manual",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "ChargePV",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "Dynamic",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 5,
+        "x": 460,
+        "y": 180,
+        "wires": [
+            [
+                "bender_master_link_uit"
+            ],
+            [
+                "bender_master_link_direct"
+            ],
+            [
+                "bender_master_link_manual"
+            ],
+            [
+                "bender_master_link_chargepv"
+            ],
+            [
+                "bender_master_link_dynamic"
+            ]
+        ]
+    },
+    {
+        "id": "bender_master_link_uit",
+        "type": "api-call-service",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "Stop charging",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "script.bender_stop_charging",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "x": 690,
+        "y": 60,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bender_master_link_direct",
+        "type": "link out",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "To Direct",
+        "mode": "link",
+        "links": [
+            "bender_direct_start_link"
+        ],
+        "x": 695,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "bender_master_link_manual",
+        "type": "link out",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "To Manual",
+        "mode": "link",
+        "links": [
+            "bender_manual_start_link"
+        ],
+        "x": 695,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "bender_master_link_chargepv",
+        "type": "link out",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "To ChargePV",
+        "mode": "link",
+        "links": [
+            "bender_chargepv_start_link"
+        ],
+        "x": 695,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "bender_master_link_dynamic",
+        "type": "link out",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "To Dynamic",
+        "mode": "link",
+        "links": [
+            "bender_dynamic_start_link"
+        ],
+        "x": 695,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "bender_master_debug",
+        "type": "debug",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "Strategy log",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "strategy",
+        "targetType": "msg",
+        "statusVal": "strategy",
+        "statusType": "msg",
+        "x": 450,
+        "y": 80,
+        "wires": []
+    }
+]
