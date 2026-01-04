@@ -203,6 +203,16 @@ views:
                   - entity: sensor.bender_charge_point_status
                     name: Charge Point Status
                     icon: mdi:ev-station
+                    card_mod:
+                      style: |
+                        :host {
+                          --paper-item-icon-color:
+                            {% set status = states(config.entity) %}
+                            {% if status == 'Charging' %} #2196f3
+                            {% elif status == 'Available' %} #4caf50
+                            {% else %} #f44336
+                            {% endif %};
+                        }
                   - entity: sensor.bender_charging_power_total
                     name: Totaal Laadvermogen
                     icon: mdi:flash
@@ -210,10 +220,10 @@ views:
                     name: Totaal Energie
                     icon: mdi:lightning-bolt
 
-              # --- STOP KNOP (klein) ---
+              # --- STOP KNOP (Subtiel) ---
               - type: button
-                name: "Stop Sessie"
-                icon: mdi:stop-circle
+                name: "Geforceerd Stoppen"
+                icon: mdi:stop-circle-outline
                 icon_height: 20px
                 show_state: false
                 tap_action:
@@ -224,8 +234,9 @@ views:
                 card_mod:
                   style: |
                     ha-card {
-                      background-color: #d32f2f;
-                      color: white;
+                      background-color: transparent;
+                      border: 1px solid #d32f2f;
+                      color: #d32f2f;
                     }
 
               # --- MANUAL CONTROL BUTTONS ---
