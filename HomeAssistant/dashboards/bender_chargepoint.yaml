@@ -205,13 +205,13 @@ views:
                     icon: mdi:ev-station
                     card_mod:
                       style: |
-                        ha-state-icon {
-                          color:
+                        :host {
+                          --card-mod-icon-color:
                             {% set status = states(config.entity) %}
                             {% if status == 'Charging' %} #2196f3
                             {% elif status == 'Available' %} #4caf50
                             {% else %} #f44336
-                            {% endif %} !important;
+                            {% endif %};
                         }
                   - entity: sensor.bender_charging_power_total
                     name: Totaal Laadvermogen
