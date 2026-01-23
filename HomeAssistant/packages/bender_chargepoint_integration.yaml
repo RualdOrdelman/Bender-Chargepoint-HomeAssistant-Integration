@@ -1,7 +1,7 @@
 modbus:
   - name: modbus_hub
     type: tcp
-    host: 192.168.4.191
+    host: 192.168.1.201
     port: 502
     delay: 0
     message_wait_milliseconds: 30
@@ -351,7 +351,7 @@ template:
           {% set bottleneck = [avail_l1, avail_l2, avail_l3] | min %}
           
           {# Apply absolute cap of 16A (Charging Strategy Max fallback) and ensure non-negative #}
-          {{ [bottleneck, 16] | min | max(0) | round(1) }}
+          {{ [ [bottleneck, 16] | min, 0 ] | max | round(1) }}
 
       # Total Power available for Charger (Visual Only)
       # Based on the bottleneck current * 3 phases * 230V
