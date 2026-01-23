@@ -303,6 +303,37 @@ template:
           {% set charger_power = states('sensor.bender_charging_power_total') | float(0) %}
           {{ (p1_total - charger_power) | round(0) }}
 
+      # House Consumption per phase (excl Charger)
+      - name: "Bender House Consumption L1"
+        unique_id: "bender_house_consumption_l1"
+        unit_of_measurement: "W"
+        device_class: power
+        state: >
+          {% set p1_l1 = states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) %}
+          {% set ch_l1_ma = states('sensor.bender_current_l1') | float(0) %}
+          {% set ch_l1_w = (ch_l1_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
+          {{ (p1_l1 - ch_l1_w) | round(0) }}
+
+      - name: "Bender House Consumption L2"
+        unique_id: "bender_house_consumption_l2"
+        unit_of_measurement: "W"
+        device_class: power
+        state: >
+          {% set p1_l2 = states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) %}
+          {% set ch_l2_ma = states('sensor.bender_current_l2') | float(0) %}
+          {% set ch_l2_w = (ch_l2_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
+          {{ (p1_l2 - ch_l2_w) | round(0) }}
+
+      - name: "Bender House Consumption L3"
+        unique_id: "bender_house_consumption_l3"
+        unit_of_measurement: "W"
+        device_class: power
+        state: >
+          {% set p1_l3 = states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) %}
+          {% set ch_l3_ma = states('sensor.bender_current_l3') | float(0) %}
+          {% set ch_l3_w = (ch_l3_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
+          {{ (p1_l3 - ch_l3_w) | round(0) }}
+
       # Available Current per phase (Bottleneck Calculation)
       # Calculates available amps for each phase: (Max - Margin - (Grid - Charger))
       # Returns the minimum available amps across all 3 phases (capped at 16A)
@@ -352,6 +383,43 @@ template:
           
           {# Apply absolute cap of 16A (Charging Strategy Max fallback) and ensure non-negative #}
           {{ [ [bottleneck, 16] | min, 0 ] | max | round(1) }}
+
+      # Raw Available Current per phase (calculated values before bottleneck)
+      - name: "Bender LB Available Current L1"
+        unique_id: "bender_lb_available_current_l1"
+        unit_of_measurement: "A"
+        device_class: current
+        state: >
+          {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
+          {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
+          {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
+          {% set grid_l1_a = states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) / states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
+          {% set ch_l1_a = states('sensor.bender_current_l1') | float(0) / 1000 %}
+          {{ (limit_amps - grid_l1_a + ch_l1_a) | round(1) }}
+
+      - name: "Bender LB Available Current L2"
+        unique_id: "bender_lb_available_current_l2"
+        unit_of_measurement: "A"
+        device_class: current
+        state: >
+          {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
+          {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
+          {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
+          {% set grid_l2_a = states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) / states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
+          {% set ch_l2_a = states('sensor.bender_current_l2') | float(0) / 1000 %}
+          {{ (limit_amps - grid_l2_a + ch_l2_a) | round(1) }}
+
+      - name: "Bender LB Available Current L3"
+        unique_id: "bender_lb_available_current_l3"
+        unit_of_measurement: "A"
+        device_class: current
+        state: >
+          {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
+          {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
+          {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
+          {% set grid_l3_a = states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) / states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
+          {% set ch_l3_a = states('sensor.bender_current_l3') | float(0) / 1000 %}
+          {{ (limit_amps - grid_l3_a + ch_l3_a) | round(1) }}
 
       # Total Power available for Charger (Visual Only)
       # Based on the bottleneck current * 3 phases * 230V

@@ -428,19 +428,39 @@ views:
                       entity: input_number.bender_loadbalancer_margin
                   - type: section
                     label: "Status"
-                  - entity: sensor.bender_house_consumption_excl_charger
-                    name: Huisverbruik (excl. lader)
-                    icon: mdi:home-lightning-bolt
-                  - entity: sensor.bender_loadbalancer_available_power
-                    name: Beschikbaar voor lader
-                    icon: mdi:battery-charging-high
                   - entity: sensor.bender_loadbalancer_available_current
-                    name: Beschikbare stroom (per fase)
+                    name: LB Limiet (Bottleneck)
                     icon: mdi:current-ac
+                  - type: section
+                    label: "Details per Fase (excl. lader)"
+                  - entity: sensor.bender_house_consumption_l1
+                    name: Huisverbruik L1
+                  - entity: sensor.bender_house_consumption_l2
+                    name: Huisverbruik L2
+                  - entity: sensor.bender_house_consumption_l3
+                    name: Huisverbruik L3
+                  - type: section
+                    label: "Beschikbare Stroom per Fase"
+                  - entity: sensor.bender_lb_available_current_l1
+                    name: Beschikbaar L1
+                  - entity: sensor.bender_lb_available_current_l2
+                    name: Beschikbaar L2
+                  - entity: sensor.bender_lb_available_current_l3
+                    name: Beschikbaar L3
                   - type: section
                     label: "Hardware Settings"
                   - entity: input_number.bender_house_max_power
                     name: Huisaansluiting Capaciteit
+
+              - type: markdown
+                title: "📖 Hoe werkt dit?"
+                content: >
+                  De Load Balancer berekent per fase hoeveel stroom er over is voor het laden:
+                  
+                  **Berekening:**
+                  `Zekering (25A) - Marge - (P1 Meter - Lader)`
+                  
+                  De paal pakt vervolgens de **laagste waarde** van de drie fases (de bottleneck) en gebruikt die als limiet. Zo wordt je hoofdaansluiting nooit overbelast.
 
           # ==================== KOLOM 3: ONDERHOUD / MANUAL ====================
           - type: vertical-stack
