@@ -296,9 +296,9 @@ template:
         unit_of_measurement: "W"
         device_class: power
         state: >
-          {% set p1_l1 = states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) %}
-          {% set p1_l2 = states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) %}
-          {% set p1_l3 = states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) %}
+          {% set p1_l1 = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
+          {% set p1_l2 = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
+          {% set p1_l3 = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
           {% set p1_total = p1_l1 + p1_l2 + p1_l3 %}
           {% set charger_power = states('sensor.bender_charging_power_total') | float(0) %}
           {{ (p1_total - charger_power) | round(0) }}
@@ -309,7 +309,7 @@ template:
         unit_of_measurement: "W"
         device_class: power
         state: >
-          {% set p1_l1 = states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) %}
+          {% set p1_l1 = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
           {% set ch_l1_ma = states('sensor.bender_current_l1') | float(0) %}
           {% set ch_l1_w = (ch_l1_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
           {{ (p1_l1 - ch_l1_w) | round(0) }}
@@ -319,7 +319,7 @@ template:
         unit_of_measurement: "W"
         device_class: power
         state: >
-          {% set p1_l2 = states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) %}
+          {% set p1_l2 = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
           {% set ch_l2_ma = states('sensor.bender_current_l2') | float(0) %}
           {% set ch_l2_w = (ch_l2_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
           {{ (p1_l2 - ch_l2_w) | round(0) }}
@@ -329,7 +329,7 @@ template:
         unit_of_measurement: "W"
         device_class: power
         state: >
-          {% set p1_l3 = states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) %}
+          {% set p1_l3 = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
           {% set ch_l3_ma = states('sensor.bender_current_l3') | float(0) %}
           {% set ch_l3_w = (ch_l3_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
           {{ (p1_l3 - ch_l3_w) | round(0) }}
@@ -354,7 +354,7 @@ template:
           
           {# --- Phase 1 --- #}
           {% set v_l1 = states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
-          {% set grid_l1_w = states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) %}
+          {% set grid_l1_w = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
           {% set grid_l1_a = grid_l1_w / v_l1 %}
           {% set ch_l1_ma = states('sensor.bender_current_l1') | float(0) %}
           {% set ch_l1_a = ch_l1_ma / 1000 %}
@@ -363,7 +363,7 @@ template:
           
           {# --- Phase 2 --- #}
           {% set v_l2 = states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
-          {% set grid_l2_w = states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) %}
+          {% set grid_l2_w = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
           {% set grid_l2_a = grid_l2_w / v_l2 %}
           {% set ch_l2_ma = states('sensor.bender_current_l2') | float(0) %}
           {% set ch_l2_a = ch_l2_ma / 1000 %}
@@ -371,7 +371,7 @@ template:
           
           {# --- Phase 3 --- #}
           {% set v_l3 = states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
-          {% set grid_l3_w = states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) %}
+          {% set grid_l3_w = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
           {% set grid_l3_a = grid_l3_w / v_l3 %}
           {% set ch_l3_ma = states('sensor.bender_current_l3') | float(0) %}
           {% set ch_l3_a = ch_l3_ma / 1000 %}
@@ -393,7 +393,8 @@ template:
           {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
           {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
           {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
-          {% set grid_l1_a = states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) / states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
+          {% set grid_l1_w = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
+          {% set grid_l1_a = grid_l1_w / states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
           {% set ch_l1_a = states('sensor.bender_current_l1') | float(0) / 1000 %}
           {{ (limit_amps - grid_l1_a + ch_l1_a) | round(1) }}
 
@@ -405,7 +406,8 @@ template:
           {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
           {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
           {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
-          {% set grid_l2_a = states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) / states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
+          {% set grid_l2_w = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
+          {% set grid_l2_a = grid_l2_w / states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
           {% set ch_l2_a = states('sensor.bender_current_l2') | float(0) / 1000 %}
           {{ (limit_amps - grid_l2_a + ch_l2_a) | round(1) }}
 
@@ -417,7 +419,8 @@ template:
           {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
           {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
           {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
-          {% set grid_l3_a = states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) / states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
+          {% set grid_l3_w = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
+          {% set grid_l3_a = grid_l3_w / states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
           {% set ch_l3_a = states('sensor.bender_current_l3') | float(0) / 1000 %}
           {{ (limit_amps - grid_l3_a + ch_l3_a) | round(1) }}
 
