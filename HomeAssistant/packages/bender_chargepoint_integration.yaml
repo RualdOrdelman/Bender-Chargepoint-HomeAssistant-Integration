@@ -271,21 +271,6 @@ template:
             0
           {% endif %}
 
-      # Current per phase based on available power (W / 3 / V = A per phase)
-      - name: "Bender PV Available Current Per Phase"
-        unique_id: "bender_pv_available_current_per_phase"
-        unit_of_measurement: "A"
-        device_class: current
-        state: >
-          {% set available_power = states('sensor.bender_pv_available_power') | float(0) %}
-          {% set voltage_l1 = states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
-          {% set voltage_l2 = states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
-          {% set voltage_l3 = states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
-          {% set avg_voltage = (voltage_l1 + voltage_l2 + voltage_l3) / 3 %}
-          {% set power_per_phase = available_power / 3 %}
-          {% set current_per_phase = power_per_phase / avg_voltage %}
-          {{ current_per_phase | round(1) }}
-
       # -------------------------------------------------------------------------
       # LOAD BALANCER SENSORS
       # -------------------------------------------------------------------------
