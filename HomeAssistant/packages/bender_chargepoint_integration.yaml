@@ -119,13 +119,6 @@ modbus:
 # INPUT NUMBER
 ###########################################################################################################
 input_number:
-  bender_dlm_slider:
-    name: DLM Limit
-    min: 6
-    max: 16
-    step: 1
-    unit_of_measurement: A
-    icon: mdi:current-ac
 
   bender_strategy_required_kwh:
     name: Benodigde energie
@@ -156,14 +149,6 @@ input_number:
     icon: mdi:solar-power
     mode: slider
 
-  bender_strategy_pv_calculated_current:
-    name: PV Berekende stroom
-    min: 0
-    max: 32
-    step: 0.1
-    unit_of_measurement: "A"
-    icon: mdi:current-ac
-    mode: box
 
   # Load Balancer Settings
   bender_loadbalancer_margin:
