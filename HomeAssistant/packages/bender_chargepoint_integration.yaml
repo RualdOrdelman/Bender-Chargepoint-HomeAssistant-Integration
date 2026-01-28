@@ -92,7 +92,7 @@ modbus:
         unit_of_measurement: "W"
         device_class: power
         scan_interval: 10
-      # DLM Limits (R/W)
+      # HEMS Limit (R/W)
       - name: "Bender_HEMS_Limit"
         slave: 1
         address: 1000
@@ -100,27 +100,7 @@ modbus:
         data_type: uint16
         unit_of_measurement: "A"
         scan_interval: 30
-      - name: "Bender_DLM_Limit_L1"
-        slave: 1
-        address: 613
-        input_type: holding
-        data_type: uint16
-        unit_of_measurement: "A"
-        scan_interval: 30
-      - name: "Bender_DLM_Limit_L2"
-        slave: 1
-        address: 614
-        input_type: holding
-        data_type: uint16
-        unit_of_measurement: "A"
-        scan_interval: 30
-      - name: "Bender_DLM_Limit_L3"
-        slave: 1
-        address: 615
-        input_type: holding
-        data_type: uint16
-        unit_of_measurement: "A"
-        scan_interval: 30
+
 
 ###########################################################################################################
 # INPUT NUMBER
@@ -527,28 +507,6 @@ script:
           address: 131
           value: "{{ current | int }}"
 
-  set_bender_dlm_limits:
-    alias: "Set Bender DLM Limits"
-    sequence:
-      - service: modbus.write_register
-        data:
-          hub: modbus_hub
-          slave: 1
-          address: 613
-          value: "{{ l1 | int }}"
-      - service: modbus.write_register
-        data:
-          hub: modbus_hub
-          slave: 1
-          address: 614
-          value: "{{ l2 | int }}"
-      - service: modbus.write_register
-        data:
-          hub: modbus_hub
-          slave: 1
-          address: 615
-          value: "{{ l3 | int }}"
-
   set_bender_hems_limit:
     alias: "Set Bender HEMS Limit"
     icon: mdi:home-lightning-bolt
@@ -585,11 +543,9 @@ script:
             {% endif %}
             {{ 0 if val < 6 else val }}
 
-      - service: script.set_bender_dlm_limits
+      - service: script.set_bender_hems_limit
         data:
-          l1: "{{ final_current }}"
-          l2: "{{ final_current }}"
-          l3: "{{ final_current }}"
+          current: "{{ final_current }}"
       - service: input_text.set_value
         target:
           entity_id: input_text.bender_strategy_active_status
@@ -600,11 +556,9 @@ script:
     alias: "Bender Stop Laden"
     icon: mdi:stop-circle
     sequence:
-      - service: script.set_bender_dlm_limits
+      - service: script.set_bender_hems_limit
         data:
-          l1: 0
-          l2: 0
-          l3: 0
+          current: 0
       - service: input_text.set_value
         target:
           entity_id: input_text.bender_strategy_active_status
@@ -640,11 +594,9 @@ script:
               - condition: template
                 value_template: "{{ safe_current >= 6 }}"
             sequence:
-              - service: script.set_bender_dlm_limits
+              - service: script.set_bender_hems_limit
                 data:
-                  l1: "{{ safe_current }}"
-                  l2: "{{ safe_current }}"
-                  l3: "{{ safe_current }}"
+                  current: "{{ safe_current }}"
               - service: input_text.set_value
                 target:
                   entity_id: input_text.bender_strategy_active_status

@@ -16,10 +16,16 @@
         },
         "nodes": [
             "bender_master_trigger",
+            "bender_master_lb_trigger",
+            "bender_master_lb_sensor_trigger",
+            "bender_master_check_lb_enabled",
+            "bender_master_lb_rate_limit",
+            "bender_master_fetch_strategy",
             "bender_master_init",
             "bender_master_switch",
             "bender_master_link_uit",
             "bender_master_link_direct",
+            "bender_master_link_manual",
             "bender_master_link_chargepv",
             "bender_master_link_dynamic",
             "bender_master_debug"
@@ -73,6 +79,174 @@
         "wires": [
             [
                 "bender_master_init"
+            ]
+        ]
+    },
+    {
+        "id": "bender_master_lb_trigger",
+        "type": "server-state-changed",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "LB Toggle changed",
+        "server": "b9d10367867e38e6",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "input_boolean.bender_loadbalancer_enabled"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "str",
+        "ifState": "",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": true,
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "outputProperties": [],
+        "x": 130,
+        "y": 140,
+        "wires": [
+            [
+                "bender_master_fetch_strategy"
+            ]
+        ]
+    },
+    {
+        "id": "bender_master_fetch_strategy",
+        "type": "api-current-state",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "Get active strategy",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_select.bender_charging_strategy",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 330,
+        "y": 140,
+        "wires": [
+            [
+                "bender_master_init"
+            ]
+        ]
+    },
+    {
+        "id": "bender_master_lb_sensor_trigger",
+        "type": "server-state-changed",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "LB Sensor changed",
+        "server": "b9d10367867e38e6",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "sensor.bender_loadbalancer_available_current"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "str",
+        "ifState": "",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": true,
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "outputProperties": [],
+        "x": 130,
+        "y": 200,
+        "wires": [
+            [
+                "bender_master_check_lb_enabled"
+            ]
+        ]
+    },
+    {
+        "id": "bender_master_check_lb_enabled",
+        "type": "api-current-state",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "LB Enabled?",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "on",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_boolean.bender_loadbalancer_enabled",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 330,
+        "y": 200,
+        "wires": [
+            [
+                "bender_master_lb_rate_limit"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "bender_master_lb_rate_limit",
+        "type": "delay",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "Rate limit 10s",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "10",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": true,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 510,
+        "y": 200,
+        "wires": [
+            [
+                "bender_master_fetch_strategy"
             ]
         ]
     },

@@ -269,43 +269,34 @@ views:
                           name: "6A"
                           tap_action:
                             action: call-service
-                            service: script.set_bender_dlm_limits
+                            service: script.set_bender_hems_limit
                             data:
-                              l1: 6
-                              l2: 6
-                              l3: 6
+                              current: 6
                         - type: button
                           name: "10A"
                           tap_action:
                             action: call-service
-                            service: script.set_bender_dlm_limits
+                            service: script.set_bender_hems_limit
                             data:
-                              l1: 10
-                              l2: 10
-                              l3: 10
+                              current: 10
                         - type: button
                           name: "16A"
                           tap_action:
                             action: call-service
-                            service: script.set_bender_dlm_limits
+                            service: script.set_bender_hems_limit
                             data:
-                              l1: 16
-                              l2: 16
-                              l3: 16
+                              current: 16
 
           # ==================== KOLOM 2: STROOM, VERMOGEN & LIMIETEN ====================
           - type: vertical-stack
             cards:
-              # --- DLM LIMIET GLANCE (ALWAYS VISIBLE) ---
-              - type: glance
-                title: "🚦 DLM Limieten (A)"
+              # --- HEMS LIMIET (ALWAYS VISIBLE) ---
+              - type: entities
+                title: "🚦 HEMS Limiet"
                 entities:
-                  - entity: sensor.bender_dlm_limit_l1
-                    name: L1
-                  - entity: sensor.bender_dlm_limit_l2
-                    name: L2
-                  - entity: sensor.bender_dlm_limit_l3
-                    name: L3
+                  - entity: sensor.bender_hems_limit
+                    name: Actieve Limiet
+                    icon: mdi:speedometer
 
               # --- STROOM PER FASE ---
               - type: glance

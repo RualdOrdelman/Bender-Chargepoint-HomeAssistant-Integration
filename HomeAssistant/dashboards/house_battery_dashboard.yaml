@@ -3,12 +3,12 @@ views:
     path: home-battery-control
     max_columns: 3
     title: Home battery control
-    icon: mdi:home-battery-outline
+    icon: mdi:home
     sections:
       - type: grid
         cards:
           - type: heading
-            heading: Configuration
+            heading: Onboarding
             heading_style: title
             icon: mdi:cog-outline
           - type: markdown
@@ -22,7 +22,7 @@ views:
             text_only: true
           - type: markdown
             content: >-
-              <font color=yellow><ha-icon icon="mdi:alert"></ha-icon> **Grid
+              <font color=orange><ha-icon icon="mdi:alert"></ha-icon> **Grid
               power n/a**</font>
 
 
@@ -99,6 +99,98 @@ views:
 
               Pick a battery charging strategy e.g. `self-consumption` and you
               are done!
+          - type: markdown
+            content: '### Done'
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.house_battery_control_has_node_red
+                state: 'on'
+              - condition: not
+                conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unavailable
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unknown
+          - show_name: false
+            show_icon: true
+            type: button
+            entity: input_boolean.house_battery_control_onboarding_finished
+            grid_options:
+              columns: 2
+              rows: 1
+            icon: mdi:eye-off-outline
+            hold_action:
+              action: toggle
+            visibility:
+              - condition: state
+                entity: input_boolean.house_battery_control_has_node_red
+                state: 'on'
+              - condition: not
+                conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unavailable
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unknown
+            icon_height: 25px
+          - type: markdown
+            text_only: true
+            grid_options:
+              columns: 9
+              rows: 1
+            content: |-
+              ---
+              Hide onboarding
+            visibility:
+              - condition: state
+                entity: input_boolean.house_battery_control_has_node_red
+                state: 'on'
+              - condition: not
+                conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unavailable
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unknown
+          - type: markdown
+            content: >-
+              _You can find battery settings and unhide onboarding on the
+              settings tab._
+            grid_options:
+              columns: full
+              rows: auto
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.house_battery_control_has_node_red
+                state: 'on'
+              - condition: not
+                conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unavailable
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unknown
+        visibility:
+          - condition: not
+            conditions:
+              - condition: state
+                entity: input_boolean.house_battery_control_onboarding_finished
+                state: 'on'
       - type: grid
         cards:
           - type: heading
@@ -131,15 +223,15 @@ views:
             hide_state: true
             name: Control Mode
             icon: mdi:camera-control
-          - features:
-              - type: select-options
-            type: tile
+          - type: tile
             entity: input_select.house_battery_strategy
-            features_position: bottom
-            vertical: false
-            hide_state: true
+            name: Choose strategy
             show_entity_picture: false
-            name: Full Control Strategy
+            hide_state: true
+            vertical: false
+            features:
+              - type: select-options
+            features_position: bottom
             visibility:
               - condition: state
                 entity: input_select.marstek_master_battery_mode
@@ -158,26 +250,46 @@ views:
               - condition: state
                 entity: input_select.house_battery_strategy
                 state: Dynamic
-          - type: tile
+          - type: heading
+            icon: mdi:information-slab-circle
+            heading: 'About strategies '
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://gitcodebob.github.io/marstek-venus-rs485-node-red/03-strategies.html
+          - type: entities
+            entities:
+              - entity: input_text.house_battery_strategy_active_sub_strategy
+                type: simple-entity
+                name: Executing (flow)
             grid_options:
-              columns: full
+              columns: 12
+              rows: auto
+            show_header_toggle: false
+            state_color: false
+            no_background: true
             visibility:
-              - condition: and
-                conditions:
-                  - condition: or
-                    conditions:
-                      - condition: state
-                        entity: input_select.house_battery_strategy
-                        state: Timed
-                      - condition: state
-                        entity: input_select.house_battery_strategy
-                        state: Dynamic
-                  - condition: state
-                    entity: input_select.marstek_master_battery_mode
-                    state: Full control
-            entity: input_text.house_battery_strategy_active_sub_strategy
-            vertical: false
-            features_position: bottom
+              - condition: state
+                entity: input_select.marstek_master_battery_mode
+                state: Full control
+          - type: history-graph
+            entities:
+              - entity: input_select.house_battery_strategy
+                name: Chosen strategy
+              - entity: input_text.house_battery_strategy_active_sub_strategy
+                name: Executing
+            visibility:
+              - condition: state
+                entity: input_select.marstek_master_battery_mode
+                state: Full control
+            hours_to_show: 12
+          - type: markdown
+            content: |-
+              <font color="grey">
+
+              #### Your energy and battery usage</font>
+            text_only: true
           - type: history-graph
             entities:
               - entity: input_number.house_battery_control_pid_output
@@ -193,42 +305,6 @@ views:
               - entity: select.marstek_m4_forcible_charge_discharge
                 name: M4
             hours_to_show: 0.05
-          - type: markdown
-            content: '### Settings'
-            text_only: true
-          - type: heading
-            icon: mdi:information
-            heading: Charge this battery first
-            heading_style: subtitle
-            tap_action:
-              action: url
-              url_path: >-
-                https://github.com/gitcodebob/marstek-venus-rs485-node-red/blob/main/docs/06-advanced-features.md#battery-life
-          - show_name: true
-            show_icon: true
-            show_state: true
-            type: glance
-            entities:
-              - entity: input_number.house_battery_control_prioritize_battery
-                name: 'Battery #'
-              - entity: input_select.house_battery_control_priority_change_interval
-            state_color: false
-            columns: 3
-          - type: heading
-            icon: mdi:information
-            heading: Battery life improvement
-            heading_style: subtitle
-            tap_action:
-              action: url
-              url_path: >-
-                https://github.com/gitcodebob/marstek-venus-rs485-node-red/blob/main/docs/06-advanced-features.md#battery-life
-          - type: entities
-            entities:
-              - entity: input_number.house_battery_control_idle_time
-                name: Stop after Idle for
-              - entity: input_number.house_battery_control_hysteresis_in_w
-                name: 'Hysteresis '
-                secondary_info: none
           - type: heading
             icon: mdi:information
             heading: Self-consumption
@@ -407,16 +483,343 @@ views:
                   - condition: numeric_state
                     entity: input_number.house_battery_count
                     above: 3
+          - type: heading
+            heading: Info and guides
+            heading_style: title
+            icon: mdi:book-open-page-variant
+          - type: heading
+            icon: mdi:information-slab-circle
+            heading: Online documentation
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: https://gitcodebob.github.io/marstek-venus-rs485-node-red/
+          - type: heading
+            icon: mdi:youtube-subscription
+            heading: Youtube (playlist)
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://www.youtube.com/playlist?list=PL9wonDMnFmzvm-ln2iHdRE5niDD3ikrKn
     header:
       card:
         type: markdown
-        content: |-
-          # Home batteries
-          Configuration and settings (v3.5.6)
+        content: '### Home Battery Control *(v4.3.2)*'
         text_only: true
+    cards: []
   - type: sections
     max_columns: 3
-    title: Timed strategy
+    icon: mdi:transmission-tower-off
+    path: ''
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: PID controller (advanced settings)
+            heading_style: title
+            icon: mdi:cog-box
+          - type: markdown
+            content: >-
+              <font color="grey"><i>These settings tune how aggressive the
+              system tries to keep the grid power at the desired power level.
+              Too aggressive is unstable! Too safe  will toss efficiency. This
+              PID control can outperform Vendor made software by a great margin,
+              according to community feedback.
+
+              </i></font>
+            text_only: true
+          - type: heading
+            icon: mdi:information
+            heading: Help | setup and tuning PID control
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://gitcodebob.github.io/marstek-venus-rs485-node-red/04-setup-self-consumption.html
+          - type: markdown
+            content: >-
+              <font color=orange><ha-icon icon="mdi:alert"></ha-icon> High
+              values - monitor your system</font>, use at your own risk.
+            visibility:
+              - condition: or
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.house_battery_control_kp
+                    above: 0.5
+                  - condition: numeric_state
+                    entity: input_number.house_battery_control_ki
+                    above: 0.5
+                  - condition: numeric_state
+                    entity: input_number.house_battery_control_kd
+                    above: 0.5
+                  - condition: numeric_state
+                    entity: input_number.house_battery_control_error_signal_dampening
+                    above: 70
+                    below: 0
+                  - condition: numeric_state
+                    entity: input_number.house_battery_control_pid_output_dampening
+                    above: 50
+            text_only: true
+          - type: entities
+            entities:
+              - entity: input_select.house_battery_control_pid_presets
+                name: PID presets
+              - entity: input_number.house_battery_control_kp
+                name: Proportional gain (Kp)
+              - entity: input_number.house_battery_control_ki
+                name: Integral gain (Ki)
+              - entity: input_number.house_battery_control_kd
+                name: Differential gain (Kd)
+              - entity: input_number.house_battery_control_error_signal_dampening
+                name: Input smoothing
+                secondary_info: none
+              - entity: input_number.house_battery_control_pid_output_dampening
+                name: Output smoothing
+              - entity: input_number.house_target_grid_consumption_in_w
+                name: Target grid consumption
+      - type: grid
+        cards:
+          - type: heading
+            heading: PID history
+            heading_style: title
+            icon: mdi:cog-box
+          - type: markdown
+            content: >-
+              <font color="grey"><i>Use **PID History** for tuning. It shows the
+              internal controller values:
+
+
+              * **Input (W):** Grid power error (Current vs. Desired)
+
+              * **Output (W):** Target battery power
+
+              * **Output (W):** P-term + I-term + D-term
+
+
+              </i></font>
+            text_only: true
+            grid_options:
+              columns: full
+          - title: PID analysis
+            type: history-graph
+            entities:
+              - entity: input_number.house_battery_control_pid_output
+                name: PID output
+              - entity: sensor.p1_meter_power
+                name: Grid power
+              - entity: input_number.house_battery_control_error_signal
+                name: PID input
+              - entity: input_number.house_battery_control_p_term
+                name: P-term
+              - entity: input_number.house_battery_control_i_term
+                name: I-term
+              - entity: input_number.house_battery_control_d_term
+                name: D-term
+            grid_options:
+              columns: full
+            hours_to_show: 0.025
+          - type: markdown
+            content: >-
+              <font color="grey"><i>Click on the labels in the legenda to turn
+              individual graphs on/off
+
+              </i></font>
+            text_only: true
+            grid_options:
+              columns: full
+        column_span: 2
+    title: Self-consumption
+    cards: []
+    badges:
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_select.house_battery_strategy
+        name: Choose strategy
+        tap_action:
+          action: more-info
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_text.house_battery_strategy_active_sub_strategy
+        show_entity_picture: false
+        name: Executing
+    header:
+      layout: center
+      badges_position: top
+      badges_wrap: scroll
+      card:
+        type: markdown
+        content: >-
+          ### Self-consumption strategy (NoM)
+
+          The **PID controller** steers your batteries to keep grid usage near
+          target, _e.g. 0 Watt_, and is used by: 
+
+          _Self-consumption, Charge PV, Charge (regulated), Peak shaving and
+          more..._
+        text_only: true
+  - type: sections
+    max_columns: 4
+    title: Charge/Sell
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Charge strategy
+            heading_style: title
+            icon: mdi:battery-charging-80
+          - type: heading
+            icon: mdi:information-slab-circle
+            heading: Charge until
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://gitcodebob.github.io/marstek-venus-rs485-node-red/03-strategies.html#charge-from-grid
+          - type: entities
+            entities:
+              - entity: input_select.house_battery_strategy_charge_goal
+              - type: conditional
+                conditions:
+                  - entity: input_select.house_battery_strategy_charge_goal
+                    state: energy reserve
+                row:
+                  entity: input_number.house_battery_strategy_charge_target_energy
+              - type: conditional
+                conditions:
+                  - entity: input_select.house_battery_strategy_charge_goal
+                    state: state of charge
+                row:
+                  entity: input_number.house_battery_strategy_charge_target_soc
+            show_header_toggle: false
+            state_color: false
+          - type: markdown
+            content: >-
+              <font color=grey>_'Reserve' is usable energy in your batteries
+              (e.g. above 12% SoC)_
+
+              </font>
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_select.house_battery_strategy_charge_goal
+                state: energy reserve
+          - type: heading
+            icon: mdi:transmission-tower-import
+            heading: Power limit during import from grid
+            heading_style: subtitle
+          - type: entities
+            entities:
+              - entity: input_boolean.house_battery_strategy_charge_has_max_power
+              - type: conditional
+                conditions:
+                  - entity: input_boolean.house_battery_strategy_charge_has_max_power
+                    state: 'off'
+                row:
+                  type: input-number-entity
+                  entity: input_number.house_battery_strategy_charge_target_power
+                  icon: mdi:home-import-outline
+          - type: markdown
+            content: >-
+              <font color=grey><i>Visit the '<ha-icon
+              icon="mdi:cog-outline"></ha-icon>settings tab' for fine grained
+              control **per battery**
+
+              </i></font>
+            text_only: true
+      - type: grid
+        cards:
+          - type: heading
+            heading: Sell strategy
+            heading_style: title
+            icon: mdi:cash-multiple
+          - type: heading
+            icon: mdi:information-slab-circle
+            heading: Sell until
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://gitcodebob.github.io/marstek-venus-rs485-node-red/03-strategies.html#charge-from-grid
+          - type: entities
+            entities:
+              - entity: input_select.house_battery_strategy_sell_goal
+              - type: conditional
+                conditions:
+                  - entity: input_select.house_battery_strategy_sell_goal
+                    state: energy reserve
+                row:
+                  entity: input_number.house_battery_strategy_sell_target_energy
+              - type: conditional
+                conditions:
+                  - entity: input_select.house_battery_strategy_sell_goal
+                    state: state of charge
+                row:
+                  entity: input_number.house_battery_strategy_sell_target_soc
+            show_header_toggle: false
+            state_color: false
+          - type: markdown
+            content: >-
+              <font color=grey>_'Reserve' is usable energy in your batteries
+              (e.g. above 12% SoC)_
+
+              </font>
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_select.house_battery_strategy_sell_goal
+                state: energy reserve
+          - type: heading
+            icon: mdi:transmission-tower-export
+            heading: Power limit during export to grid
+            heading_style: subtitle
+          - type: entities
+            entities:
+              - entity: input_boolean.house_battery_strategy_sell_has_max_power
+              - type: conditional
+                conditions:
+                  - entity: input_boolean.house_battery_strategy_sell_has_max_power
+                    state: 'off'
+                row:
+                  type: input-number-entity
+                  entity: input_number.house_battery_strategy_sell_target_power
+          - type: markdown
+            content: >-
+              <font color=grey><i>Visit the '<ha-icon
+              icon="mdi:cog-outline"></ha-icon>settings tab' for fine grained
+              control **per battery**
+
+              </i></font>
+            text_only: true
+    icon: mdi:transmission-tower-export
+    cards: []
+    badges:
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_select.house_battery_strategy
+        name: Choose strategy
+        tap_action:
+          action: more-info
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_text.house_battery_strategy_active_sub_strategy
+        show_entity_picture: false
+        name: Executing
+    header:
+      layout: center
+      badges_position: top
+      badges_wrap: scroll
+  - type: sections
+    max_columns: 3
+    title: Timed/Dynamic
     icon: mdi:timer-cog-outline
     sections:
       - type: grid
@@ -424,10 +827,30 @@ views:
           - type: heading
             heading: Timed strategy
             heading_style: title
+          - type: heading
+            icon: mdi:youtube
+            heading: Using the timed strategy
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: https://youtu.be/UbeJaRjFK_o?t=53s
           - type: entities
             entities:
               - entity: input_select.house_battery_strategy_timed_strat_0
                 name: Default strategy
+            grid_options:
+              columns: 9
+              rows: auto
+          - clock_style: digital
+            clock_size: small
+            show_seconds: false
+            no_background: true
+            type: clock
+            grid_options:
+              columns: 3
+              rows: 1
+            title: Time
+            face_style: markers
           - type: entities
             entities:
               - entity: input_datetime.house_battery_strategy_timed_period_a1
@@ -528,92 +951,6 @@ views:
       - type: grid
         cards:
           - type: heading
-            heading: Settings
-            heading_style: title
-          - type: entities
-            entities:
-              - entity: input_text.house_battery_strategy_active_sub_strategy
-                type: simple-entity
-                name: Active strategy
-            grid_options:
-              columns: 9
-              rows: auto
-            show_header_toggle: false
-            state_color: false
-            no_background: true
-          - clock_style: digital
-            clock_size: small
-            show_seconds: false
-            no_background: true
-            type: clock
-            grid_options:
-              columns: 3
-              rows: 1
-            title: Time
-            face_style: markers
-          - type: markdown
-            content: '#### Charge'
-            text_only: true
-          - type: entities
-            entities:
-              - entity: input_number.house_battery_strategy_timed_target_energy
-                name: Target energy reserve
-              - entity: input_boolean.house_battery_strategy_timed_has_max_power
-              - type: conditional
-                conditions:
-                  - entity: input_boolean.house_battery_strategy_timed_has_max_power
-                    state: 'off'
-                row:
-                  type: input-number-entity
-                  entity: input_number.house_battery_strategy_timed_target_power
-                  name: Target grid consumption
-                  icon: mdi:home-import-outline
-          - type: markdown
-            content: >-
-              <font color=grey>*) _Usable energy reserve, excl. 12% cut-off
-              SoC_</font>
-            text_only: true
-          - type: markdown
-            content: '#### Self-consumption'
-            text_only: true
-          - type: markdown
-            content: >-
-              <font color=orange><ha-icon icon="mdi:alert"></ha-icon> High
-              sensitivity - monitor your system</font>, use at your own risk.
-            visibility:
-              - condition: or
-                conditions:
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_kp
-                    above: 0.5
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_ki
-                    above: 0.5
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_kd
-                    above: 0.5
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_error_signal_dampening
-                    above: 70
-                    below: 0
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_pid_output_dampening
-                    above: 50
-            text_only: true
-          - type: entities
-            entities:
-              - entity: input_select.house_battery_control_pid_presets
-                name: Controller sensitivity
-          - type: heading
-            icon: ''
-            heading: Configure custom settings
-            heading_style: subtitle
-            tap_action:
-              action: navigate
-              navigation_path: /home-battery/advanced-settings
-      - type: grid
-        cards:
-          - type: heading
             heading: Dynamic strategy
             heading_style: title
           - type: markdown
@@ -629,6 +966,40 @@ views:
             text_only: true
             visibility:
               - condition: or
+                conditions:
+                  - condition: state
+                    entity: update.cheapest_energy_hours_update
+                    state: unavailable
+                  - condition: state
+                    entity: update.cheapest_energy_hours_update
+                    state: unknown
+          - type: heading
+            icon: mdi:information
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://gitcodebob.github.io/marstek-venus-rs485-node-red/05-setup-dynamic.html#setup-getting-dynamic-up-and-running
+            visibility:
+              - condition: or
+                conditions:
+                  - condition: state
+                    entity: update.cheapest_energy_hours_update
+                    state: unavailable
+                  - condition: state
+                    entity: update.cheapest_energy_hours_update
+                    state: unknown
+            heading: Setup instructions dynamic strategy
+          - type: heading
+            icon: mdi:information
+            heading: Using the dynamic strategy
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://gitcodebob.github.io/marstek-venus-rs485-node-red/05-setup-dynamic.html#use-the-dynamic-strategy
+            visibility:
+              - condition: not
                 conditions:
                   - condition: state
                     entity: update.cheapest_energy_hours_update
@@ -659,6 +1030,14 @@ views:
               - type: numeric-input
                 style: buttons
             features_position: bottom
+          - type: heading
+            icon: mdi:information
+            heading_style: subtitle
+            heading: Calculated periods and tariffs
+            tap_action:
+              action: url
+              url_path: >-
+                https://gitcodebob.github.io/marstek-venus-rs485-node-red/05-setup-dynamic.html#period-startend-times-read-only
           - type: entities
             entities:
               - entity: input_datetime.house_battery_strategy_dynamic_cheapest_start
@@ -716,6 +1095,164 @@ views:
               1. _Note: currently it is not possible to change the strategy per
               period via this dashboard_
     cards: []
+    badges:
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_select.house_battery_strategy
+        name: Choose strategy
+        tap_action:
+          action: more-info
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_text.house_battery_strategy_active_sub_strategy
+        show_entity_picture: false
+        name: Executing
+    header:
+      layout: center
+      badges_position: top
+      badges_wrap: scroll
+  - type: sections
+    max_columns: 3
+    icon: mdi:spider-outline
+    path: ''
+    background:
+      opacity: 10
+      alignment: center
+      size: cover
+      repeat: repeat
+      attachment: fixed
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Node-RED
+            heading_style: title
+          - type: heading
+            icon: mdi:list-status
+            heading: 🕵️ Flow trace
+            heading_style: subtitle
+          - type: markdown
+            content: >-
+              **Strategy:** {{ states('input_select.house_battery_strategy')}}
+
+              ***
+
+              {% set history = state_attr('sensor.home_battery_control_trace',
+              'history') or [] %} {% set start_ts =
+              state_attr('sensor.home_battery_control_trace', 'start') %} {% set
+              end_ts = state_attr('sensor.home_battery_control_trace', 'end') %}
+              {% set start_dt = (start_ts / 1000) | as_datetime if start_ts is
+              number else as_datetime(start_ts) %} {% set end_dt = (end_ts /
+              1000) | as_datetime if end_ts is number else as_datetime(end_ts)
+              %} {% set total_dt = (end_dt - start_dt).total_seconds() if end_dt
+              and start_dt else 0 %}
+
+              Flows used
+
+              | Step | Flow | Duration |
+
+              | :--- | :--- | :--- |
+
+              {% set first_ts = history[0].timestamp if history|length > 0 else
+              end_ts %} {% set first_dt = (first_ts / 1000) | as_datetime if
+              first_ts is number else as_datetime(first_ts) %} {% set d0 =
+              (first_dt - start_dt).total_seconds() if first_dt and start_dt
+              else 0 %} | 0 | Home battery start | `{{ "{:.3f}".format(d0) }}s`
+              |
+
+              {% for entry in history -%}
+                {%- set ts = entry.timestamp -%}
+                {%- set current_dt = (ts / 1000) | as_datetime if ts is number else as_datetime(ts) -%}
+                {%- if not loop.last -%}
+                  {%- set next_ts = history[loop.index].timestamp -%}
+                {%- else -%}
+                  {%- set next_ts = end_ts -%}
+                {%- endif -%}    
+                {%- set next_dt = (next_ts / 1000) | as_datetime if next_ts is number else as_datetime(next_ts) -%}
+                {%- set delta = (next_dt - current_dt).total_seconds() if next_dt and current_dt else 0 -%}
+                | {{ loop.index }} | {{ entry.flow }} | `{{ "{:.3f}".format(delta) }}s` |
+              {% endfor %} | ✔️ | Home Battery Start | `Done` |
+
+
+              **Total `{{ "{:.3f}".format(total_dt) }}s`** spent in strategy
+              flows
+      - type: grid
+        cards:
+          - type: heading
+            heading: Insight
+            heading_style: title
+          - type: heading
+            icon: mdi:list-box-outline
+            heading: 📋 Explenations (last 100 items)
+            heading_style: subtitle
+          - type: markdown
+            content: >
+              {% set logs = state_attr('sensor.home_battery_control_log', 'log')
+              %}  {% if logs %}
+
+              | Time |  | Flow | Node | Explenation |
+
+              | :--- | :--- | :--- | :--- | :--- |
+                {%- for entry in logs %}
+                {%- set color = '#009ac7' -%}
+                {%- if entry.level == 'log' %}{% set color = '#38cd9e' -%}
+                {%- elif entry.level == 'warn' %}{% set color = 'orange' -%}
+                {%- elif entry.level == 'error' %}{% set color = 'red' -%}
+                {%- endif %}
+                | {{ entry.timestamp }} | {{ entry.icon }} |<font color="{{color}}">{{ entry.flow }}</font> | {{ entry.node }} |{{ entry.payload }} |
+                {%- endfor %}
+              {% else %}
+                No logs available
+              {% endif %}
+            grid_options:
+              columns: full
+        column_span: 2
+    header:
+      card:
+        type: markdown
+        text_only: true
+        content: >-
+          ### Debug
+
+          Need help figuring out what is going on? 
+
+          Hit **Debug mode**. _Auto-off after 5min._
+
+          📘 [Troubleshooting
+          documentation](https://gitcodebob.github.io/marstek-venus-rs485-node-red/07-troubleshooting.html)
+      layout: center
+      badges_position: top
+      badges_wrap: scroll
+    badges:
+      - type: entity
+        show_name: true
+        show_state: false
+        show_icon: true
+        entity: input_boolean.house_battery_control_is_debug_mode
+        tap_action:
+          action: toggle
+        name:
+          type: entity
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_select.house_battery_strategy
+        name: Choose strategy
+        tap_action:
+          action: more-info
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_text.house_battery_strategy_active_sub_strategy
+        show_entity_picture: false
+        name: Executing
+    cards: []
   - type: sections
     max_columns: 3
     title: Advanced settings
@@ -725,83 +1262,78 @@ views:
       - type: grid
         cards:
           - type: heading
-            heading: PID controller (advanced settings)
+            heading: General
             heading_style: title
-            icon: mdi:cog-box
-          - type: markdown
-            content: >-
-              <font color=yellow><ha-icon icon="mdi:alert"></ha-icon> High
-              values - monitor your system</font>, use at your own risk.
-            visibility:
-              - condition: or
-                conditions:
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_kp
-                    above: 0.5
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_ki
-                    above: 0.5
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_kd
-                    above: 0.5
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_error_signal_dampening
-                    above: 70
-                    below: 0
-                  - condition: numeric_state
-                    entity: input_number.house_battery_control_pid_output_dampening
-                    above: 50
-            text_only: true
+            icon: mdi:home
           - type: entities
             entities:
-              - entity: input_select.house_battery_control_pid_presets
-                name: PID presets
-              - entity: input_number.house_battery_control_kp
-                name: Proportional gain (Kp)
-              - entity: input_number.house_battery_control_ki
-                name: Integral gain (Ki)
-              - entity: input_number.house_battery_control_kd
-                name: Differential gain (Kd)
-              - entity: input_number.house_battery_control_error_signal_dampening
-                name: Input smoothing
-                secondary_info: none
-              - entity: input_number.house_battery_control_pid_output_dampening
-                name: Output smoothing
-              - entity: input_number.house_target_grid_consumption_in_w
-                name: Target grid consumption
+              - entity: input_number.house_battery_count
+          - type: tile
+            visibility:
+              - condition: state
+                entity: input_boolean.house_battery_control_has_node_red
+                state: 'on'
+              - condition: not
+                conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unavailable
+                      - condition: state
+                        entity: sensor.p1_meter_power
+                        state: unknown
+            entity: input_boolean.house_battery_control_onboarding_finished
+            name: Show/Hide onboarding
+            icon: mdi:eye-off-outline
+            color: disabled
+            show_entity_picture: false
+            hide_state: true
+            vertical: false
+            tap_action:
+              action: toggle
+            features_position: bottom
+            grid_options:
+              columns: full
+      - type: grid
+        cards:
+          - type: heading
+            heading: Battery life
+            heading_style: title
+            icon: mdi:medication
           - type: heading
             icon: mdi:information
-            heading: Help | setup and tuning PID control
+            heading: Cycle which battery to charge first
             heading_style: subtitle
             tap_action:
               action: url
               url_path: >-
-                https://github.com/gitcodebob/marstek-venus-rs485-node-red/blob/main/docs/04-setup-self-consumption.md#pid-operation
-      - type: grid
-        cards:
-          - type: heading
-            heading: PID history
-            heading_style: title
-            icon: mdi:cog-box
-          - title: PID analysis
-            type: history-graph
+                https://github.com/gitcodebob/marstek-venus-rs485-node-red/blob/main/README.md#advanced-features
+          - show_name: true
+            show_icon: true
+            show_state: true
+            type: glance
             entities:
-              - entity: input_number.house_battery_control_pid_output
-                name: PID sum
-              - entity: sensor.p1_meter_power
-                name: Grid power
-              - entity: input_number.house_battery_control_error_signal
-                name: Error
-              - entity: input_number.house_battery_control_p_term
-                name: P-term
-              - entity: input_number.house_battery_control_i_term
-                name: I-term
-              - entity: input_number.house_battery_control_d_term
-                name: D-term
-            grid_options:
-              columns: full
-            hours_to_show: 0.1
-        column_span: 2
+              - entity: input_number.house_battery_control_prioritize_battery
+                name: 'Battery #'
+              - entity: input_select.house_battery_control_priority_change_interval
+            state_color: false
+            columns: 3
+          - type: heading
+            icon: mdi:information
+            heading: Optimize stop and go behavior
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://github.com/gitcodebob/marstek-venus-rs485-node-red?tab=readme-ov-file#battery-life
+          - type: entities
+            entities:
+              - entity: input_number.house_battery_control_idle_time
+                name: Stop after Idle for
+              - entity: input_number.house_battery_control_hysteresis_in_w
+                name: 'Hysteresis '
+                secondary_info: none
       - type: grid
         cards:
           - type: heading
@@ -838,4 +1370,296 @@ views:
               an all stop has been triggered. Stop trigger 'on' = batteries
               'Full stop'.</font>
             text_only: true
+      - type: grid
+        cards:
+          - type: markdown
+            content: '---'
+            grid_options:
+              columns: full
+            text_only: true
+        column_span: 3
+      - type: grid
+        cards:
+          - type: heading
+            icon: mdi:power-plug-battery
+            heading: Marstek M1
+            heading_style: title
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: '**<font color="#9b9b9b">Discharging</font>**'
+                text_only: true
+              - type: tile
+                entity: input_number.marstek_m1_discharging_cutoff_capacity
+                name: Cutoff capacity
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+              - type: tile
+                entity: number.marstek_m1_max_discharge_power
+                name: Max Power
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: '**<font color="#9b9b9b">Charging</font>**'
+                text_only: true
+              - type: tile
+                grid_options:
+                  columns: 12
+                  rows: 2
+                entity: input_number.marstek_m1_charging_cutoff_capacity
+                name: Cutoff capacity
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+              - type: tile
+                grid_options:
+                  columns: 12
+                  rows: 2
+                entity: number.marstek_m1_max_charge_power
+                name: 'Max. Power '
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+          - type: heading
+            icon: mdi:information-slab-circle
+            heading: Cutoff capacities
+            heading_style: subtitle
+            tap_action:
+              action: url
+              url_path: >-
+                https://gitcodebob.github.io/marstek-venus-rs485-node-red/06-advanced-features.html#chargingdischarging-limits
+      - type: grid
+        cards:
+          - type: heading
+            icon: mdi:power-plug-battery
+            heading: Marstek M2
+            heading_style: title
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: '**<font color="#9b9b9b">Discharging</font>**'
+                text_only: true
+              - type: tile
+                entity: input_number.marstek_m2_discharging_cutoff_capacity
+                name: Cutoff capacity
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+              - type: tile
+                entity: number.marstek_m2_max_discharge_power
+                name: Max Power
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: '**<font color="#9b9b9b">Charging</font>**'
+                text_only: true
+              - type: tile
+                grid_options:
+                  columns: 12
+                  rows: 2
+                entity: input_number.marstek_m2_charging_cutoff_capacity
+                name: Cutoff capacity
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+              - type: tile
+                grid_options:
+                  columns: 12
+                  rows: 2
+                entity: number.marstek_m2_max_charge_power
+                name: 'Max. Power '
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+        visibility:
+          - condition: numeric_state
+            entity: input_number.house_battery_count
+            above: 1
+      - type: grid
+        cards:
+          - type: heading
+            icon: mdi:power-plug-battery
+            heading: Marstek M3
+            heading_style: title
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: '**<font color="#9b9b9b">Discharging</font>**'
+                text_only: true
+              - type: tile
+                entity: input_number.marstek_m3_discharging_cutoff_capacity
+                name: Cutoff capacity
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+              - type: tile
+                entity: number.marstek_m3_max_discharge_power
+                name: Max Power
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: '**<font color="#9b9b9b">Charging</font>**'
+                text_only: true
+              - type: tile
+                grid_options:
+                  columns: 12
+                  rows: 2
+                entity: input_number.marstek_m3_charging_cutoff_capacity
+                name: Cutoff capacity
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+              - type: tile
+                grid_options:
+                  columns: 12
+                  rows: 2
+                entity: number.marstek_m3_max_charge_power
+                name: 'Max. Power '
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+        visibility:
+          - condition: numeric_state
+            entity: input_number.house_battery_count
+            above: 2
+      - type: grid
+        cards:
+          - type: heading
+            icon: mdi:power-plug-battery
+            heading: Marstek M4
+            heading_style: title
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: '**<font color="#9b9b9b">Discharging</font>**'
+                text_only: true
+              - type: tile
+                entity: input_number.marstek_m4_discharging_cutoff_capacity
+                name: Cutoff capacity
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+              - type: tile
+                entity: number.marstek_m4_max_discharge_power
+                name: Max Power
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: '**<font color="#9b9b9b">Charging</font>**'
+                text_only: true
+              - type: tile
+                grid_options:
+                  columns: 12
+                  rows: 2
+                entity: input_number.marstek_m4_charging_cutoff_capacity
+                name: Cutoff capacity
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+              - type: tile
+                grid_options:
+                  columns: 12
+                  rows: 2
+                entity: number.marstek_m4_max_charge_power
+                name: 'Max. Power '
+                hide_state: true
+                vertical: false
+                features:
+                  - type: numeric-input
+                    style: buttons
+                features_position: inline
+        visibility:
+          - condition: numeric_state
+            entity: input_number.house_battery_count
+            above: 3
     cards: []
+    badges:
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_select.house_battery_strategy
+        name: Choose strategy
+        tap_action:
+          action: more-info
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_text.house_battery_strategy_active_sub_strategy
+        show_entity_picture: false
+        name: Executing
+    header:
+      layout: center
+      badges_position: top
+      badges_wrap: scroll

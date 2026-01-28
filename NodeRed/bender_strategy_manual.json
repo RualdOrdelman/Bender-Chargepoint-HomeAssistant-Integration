@@ -4,7 +4,7 @@
         "type": "tab",
         "label": "Bender Strategy Manual",
         "disabled": false,
-        "info": "Manual strategy: Allows manual setting of DLM limits"
+        "info": "Manual strategy: Allows manual setting of HEMS limit"
     },
     {
         "id": "bender_manual_group",
@@ -57,7 +57,7 @@
             "input_text.bender_strategy_active_status"
         ],
         "labelId": [],
-        "data": "{\"value\": \"Manual: Handbediening actief (DLM limiet)\"}",
+        "data": "{\"value\": \"Manual: Handbediening actief (HEMS limiet)\"}",
         "dataType": "json",
         "mergeContext": "",
         "mustacheAltTags": false,
