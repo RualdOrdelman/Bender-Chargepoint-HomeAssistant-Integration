@@ -100,6 +100,15 @@ modbus:
         data_type: uint16
         unit_of_measurement: "A"
         scan_interval: 30
+      # EV Battery State / SOC (R)
+      - name: "Bender_EV_Battery_SOC"
+        slave: 1
+        address: 730
+        input_type: holding
+        data_type: uint16
+        unit_of_measurement: "%"
+        device_class: battery
+        scan_interval: 60
 
 
 ###########################################################################################################

@@ -213,6 +213,9 @@ views:
                             {% else %} #f44336
                             {% endif %};
                         }
+                  - entity: sensor.bender_ev_battery_soc
+                    name: Auto Batterij (SOC)
+                    icon: mdi:car-battery
                   - entity: sensor.bender_charging_power_total
                     name: Totaal Laadvermogen
                     icon: mdi:flash
