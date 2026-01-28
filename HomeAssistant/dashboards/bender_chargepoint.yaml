@@ -219,6 +219,16 @@ views:
                   - entity: sensor.bender_totalenergy
                     name: Totaal Energie
                     icon: mdi:lightning-bolt
+                  - type: section
+                  - entity: sensor.bender_lb_available_current_l1
+                    name: Beschikbaar L1
+                    icon: mdi:sine-wave
+                  - entity: sensor.bender_lb_available_current_l2
+                    name: Beschikbaar L2
+                    icon: mdi:sine-wave
+                  - entity: sensor.bender_lb_available_current_l3
+                    name: Beschikbaar L3
+                    icon: mdi:sine-wave
 
               # --- STOP KNOP (Subtiel) ---
               - type: button
