@@ -213,6 +213,17 @@ views:
                             {% else %} #f44336
                             {% endif %};
                         }
+                  - entity: sensor.bender_error_status
+                    name: Foutmelding
+                    icon: mdi:alert-circle
+                    card_mod:
+                      style: |
+                        :host {
+                          --card-mod-icon-color:
+                            {% if states(config.entity) == 'Geen fouten' %} #4caf50
+                            {% else %} #f44336
+                            {% endif %};
+                        }
                   - entity: sensor.bender_ev_battery_soc
                     name: Auto Batterij (SOC)
                     icon: mdi:car-battery

@@ -109,6 +109,13 @@ modbus:
         unit_of_measurement: "%"
         device_class: battery
         scan_interval: 60
+      # Error Codes (R) - Bitmask for active errors
+      - name: "Bender_Error_Code"
+        slave: 1
+        address: 105
+        input_type: holding
+        data_type: uint16
+        scan_interval: 10
 
 
 ###########################################################################################################
@@ -237,6 +244,38 @@ template:
           {% elif state == 8 %}Faulted
           {% else %}Unknown
           {% endif %}
+
+      # Error Code Translation - Converts bitmask to readable error messages
+      - name: "Bender Error Status"
+        unique_id: "bender_error_status"
+        icon: mdi:alert-circle
+        state: >
+          {% set code = states('sensor.bender_error_code') | int(0) %}
+          {% if code == 0 %}
+            Geen fouten
+          {% else %}
+            {% set errors = [] %}
+            {% if code | bitwise_and(0x0001) %}{% set errors = errors + ['Reststroom gedetecteerd'] %}{% endif %}
+            {% if code | bitwise_and(0x0002) %}{% set errors = errors + ['Voertuig meldt fout'] %}{% endif %}
+            {% if code | bitwise_and(0x0004) %}{% set errors = errors + ['Diode check mislukt'] %}{% endif %}
+            {% if code | bitwise_and(0x0008) %}{% set errors = errors + ['MCB Type 2 uitgevallen'] %}{% endif %}
+            {% if code | bitwise_and(0x0010) %}{% set errors = errors + ['MCB Schuko uitgevallen'] %}{% endif %}
+            {% if code | bitwise_and(0x0020) %}{% set errors = errors + ['Aardlekschakelaar geactiveerd'] %}{% endif %}
+            {% if code | bitwise_and(0x0040) %}{% set errors = errors + ['Contactor vastgelast'] %}{% endif %}
+            {% if code | bitwise_and(0x0080) %}{% set errors = errors + ['Backend verbinding verbroken'] %}{% endif %}
+            {% if code | bitwise_and(0x0100) %}{% set errors = errors + ['Stekker vergrendeling mislukt'] %}{% endif %}
+            {% if code | bitwise_and(0x0200) %}{% set errors = errors + ['Vergrendeling zonder stekker fout'] %}{% endif %}
+            {% if code | bitwise_and(0x0400) %}{% set errors = errors + ['Actuator vastzittend'] %}{% endif %}
+            {% if code | bitwise_and(0x0800) %}{% set errors = errors + ['Actuator detectie mislukt'] %}{% endif %}
+            {% if code | bitwise_and(0x1000) %}{% set errors = errors + ['Firmware update bezig'] %}{% endif %}
+            {% if code | bitwise_and(0x2000) %}{% set errors = errors + ['Laadpaal gekanteld'] %}{% endif %}
+            {% if code | bitwise_and(0x4000) %}{% set errors = errors + ['CP/PR bedrading fout'] %}{% endif %}
+            {% if code | bitwise_and(0x8000) %}{% set errors = errors + ['Overbelasting - laden gestopt'] %}{% endif %}
+            {{ errors | join(', ') if errors else 'Onbekende fout (' ~ code ~ ')' }}
+          {% endif %}
+        attributes:
+          error_code: "{{ states('sensor.bender_error_code') | int(0) }}"
+          has_error: "{{ states('sensor.bender_error_code') | int(0) > 0 }}"
 
       # Available PV surplus power (negative P1 = exporting = available)
       - name: "Bender PV Available Power"
