@@ -246,6 +246,20 @@ template:
           {% else %}Unknown
           {% endif %}
 
+      # EV Battery SOC - Filters 65535 (unavailable) value
+      - name: "Bender EV SOC"
+        unique_id: "bender_ev_soc"
+        icon: mdi:car-battery
+        unit_of_measurement: "%"
+        device_class: battery
+        state: >
+          {% set raw = states('sensor.bender_ev_battery_soc') | int(65535) %}
+          {% if raw == 65535 or raw > 100 %}
+            unknown
+          {% else %}
+            {{ raw }}
+          {% endif %}
+
       # Error Code Translation - Converts bitmask to readable error messages
       - name: "Bender Error Status"
         unique_id: "bender_error_status"
