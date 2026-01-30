@@ -6,10 +6,7 @@ views:
   - title: Laadpaal
     path: laadpaal
     icon: mdi:ev-station
-    panel: true
     cards:
-      - type: horizontal-stack
-        cards:
           # ==================== KOLOM 1: STRATEGIE & STATUS ====================
           - type: vertical-stack
             cards:
@@ -262,7 +259,6 @@ views:
                     name: Beschikbaar L3
                     icon: mdi:sine-wave
 
-
           # ==================== KOLOM 2: STROOM, VERMOGEN & LIMIETEN ====================
           - type: vertical-stack
             cards:
@@ -396,10 +392,7 @@ views:
   - title: Instellingen
     path: instellingen
     icon: mdi:cog
-    panel: true
     cards:
-      - type: horizontal-stack
-        cards:
           # ==================== KOLOM 1: ALGEMEEN & STRATEGIE CONFIG ====================
           - type: vertical-stack
             cards:
@@ -462,6 +455,9 @@ views:
                   - entity: input_number.bender_house_max_power
                     name: Huisaansluiting Capaciteit
 
+          # ==================== KOLOM 3: ONDERHOUD / MANUAL ====================
+          - type: vertical-stack
+            cards:
               - type: markdown
                 title: "📖 Hoe werkt dit?"
                 content: >
@@ -472,9 +468,6 @@ views:
                   
                   De paal pakt vervolgens de **laagste waarde** van de drie fases (de bottleneck) en gebruikt die als limiet. Zo wordt je hoofdaansluiting nooit overbelast.
 
-          # ==================== KOLOM 3: ONDERHOUD / MANUAL ====================
-          - type: vertical-stack
-            cards:
               - type: entities
                 title: "🛡️ Safe Current (Fallback)"
                 entities:
@@ -510,10 +503,7 @@ views:
   - title: Debugging
     path: debugging
     icon: mdi:bug
-    panel: true
     cards:
-      - type: horizontal-stack
-        cards:
           # ==================== KOLOM 1: FOUTMELDINGEN ====================
           - type: vertical-stack
             cards:
