@@ -13,21 +13,7 @@ views:
           # ==================== KOLOM 1: STRATEGIE & STATUS ====================
           - type: vertical-stack
             cards:
-              # --- STRATEGIE SELECTIE ---
-              - type: entities
-                title: "🎯 Laadstrategie"
-                entities:
-                  - entity: input_select.bender_charging_strategy
-                    name: Actieve Strategie
-                    icon: mdi:strategy
-                  - entity: input_text.bender_strategy_active_status
-                    name: Status
-                    icon: mdi:information
-                  - entity: binary_sensor.bender_charging_active
-                    name: Actief aan het laden
-                    icon: mdi:ev-station
-              
-              # Quick Strategy Buttons
+              # --- STRATEGIE SELECTIE (Quick Buttons) ---
               - type: horizontal-stack
                 cards:
                   - type: conditional
@@ -200,6 +186,13 @@ views:
               - type: entities
                 title: "🔌 Status"
                 entities:
+                  - entity: input_text.bender_strategy_active_status
+                    name: Strategie Status
+                    icon: mdi:information
+                  - entity: binary_sensor.bender_charging_active
+                    name: Actief aan het laden
+                    icon: mdi:ev-station
+                  - type: section
                   - entity: sensor.bender_charge_point_status
                     name: Charge Point Status
                     icon: mdi:ev-station
@@ -269,62 +262,6 @@ views:
                     name: Beschikbaar L3
                     icon: mdi:sine-wave
 
-              # --- STOP KNOP (Subtiel) ---
-              - type: button
-                name: "Geforceerd Stoppen"
-                icon: mdi:stop-circle-outline
-                icon_height: 20px
-                show_state: false
-                tap_action:
-                  action: call-service
-                  service: script.bender_remote_stop
-                  confirmation:
-                    text: "⚠️ Weet je zeker dat je de laadsessie geforceerd wilt stoppen?"
-                card_mod:
-                  style: |
-                    ha-card {
-                      background-color: transparent;
-                      border: 1px solid #d32f2f;
-                      color: #d32f2f;
-                      width: 60%;
-                      margin: 8px auto;
-                      border-radius: 20px;
-                    }
-
-              # --- MANUAL CONTROL BUTTONS ---
-              - type: conditional
-                conditions:
-                  - entity: input_select.bender_charging_strategy
-                    state: "Manual"
-                card:
-                  type: vertical-stack
-                  cards:
-                    - type: entities
-                      title: "⚙️ Manual Instellen (A)"
-                      entities: []
-                    - type: horizontal-stack
-                      cards:
-                        - type: button
-                          name: "6A"
-                          tap_action:
-                            action: call-service
-                            service: script.set_bender_hems_limit
-                            data:
-                              current: 6
-                        - type: button
-                          name: "10A"
-                          tap_action:
-                            action: call-service
-                            service: script.set_bender_hems_limit
-                            data:
-                              current: 10
-                        - type: button
-                          name: "16A"
-                          tap_action:
-                            action: call-service
-                            service: script.set_bender_hems_limit
-                            data:
-                              current: 16
 
           # ==================== KOLOM 2: STROOM, VERMOGEN & LIMIETEN ====================
           - type: vertical-stack
@@ -336,6 +273,39 @@ views:
                   - entity: sensor.bender_hems_limit
                     name: Actieve Limiet
                     icon: mdi:speedometer
+
+              # --- MANUAL HEMS CONTROL (alleen zichtbaar in Manual mode) ---
+              - type: conditional
+                conditions:
+                  - entity: input_select.bender_charging_strategy
+                    state: "Manual"
+                card:
+                  type: horizontal-stack
+                  cards:
+                    - type: button
+                      name: "6A"
+                      icon: mdi:current-ac
+                      tap_action:
+                        action: call-service
+                        service: script.set_bender_hems_limit
+                        data:
+                          current: 6
+                    - type: button
+                      name: "10A"
+                      icon: mdi:current-ac
+                      tap_action:
+                        action: call-service
+                        service: script.set_bender_hems_limit
+                        data:
+                          current: 10
+                    - type: button
+                      name: "16A"
+                      icon: mdi:current-ac
+                      tap_action:
+                        action: call-service
+                        service: script.set_bender_hems_limit
+                        data:
+                          current: 16
 
               # --- STROOM PER FASE ---
               - type: glance
