@@ -213,6 +213,21 @@ views:
                             {% else %} #f44336
                             {% endif %};
                         }
+                  - entity: sensor.bender_vehicle_status
+                    name: Voertuig Status (CP)
+                    icon: mdi:car-electric
+                    card_mod:
+                      style: |
+                        :host {
+                          --card-mod-icon-color:
+                            {% set status = states(config.entity) %}
+                            {% if 'C - ' in status %} #2196f3
+                            {% elif 'A - ' in status %} #9e9e9e
+                            {% elif 'B - ' in status %} #ff9800
+                            {% elif 'E - ' in status %} #f44336
+                            {% else %} #9e9e9e
+                            {% endif %};
+                        }
                   - entity: sensor.bender_error_status
                     name: Foutmelding
                     icon: mdi:alert-circle
@@ -228,10 +243,20 @@ views:
                     name: Auto Batterij (SOC)
                     icon: mdi:car-battery
                   - entity: sensor.bender_charging_power_total
-                    name: Totaal Laadvermogen
+                    name: Huidig Laadvermogen
                     icon: mdi:flash
-                  - entity: sensor.bender_totalenergy
-                    name: Totaal Energie
+                  - type: section
+                    label: "Huidige Sessie"
+                  - entity: sensor.bender_session_energy_kwh
+                    name: Laatste/Huidige Sessie Energie
+                    icon: mdi:battery-charging
+                  - entity: sensor.bender_session_duration
+                    name: Laatste/Huidige Sessie Duur
+                    icon: mdi:timer-outline
+                  - type: section
+                    label: "Lifetime"
+                  - entity: sensor.bender_lifetime_energy
+                    name: Totaal Geladen (Lifetime)
                     icon: mdi:lightning-bolt
                   - type: section
                   - entity: sensor.bender_lb_available_current_l1
@@ -508,3 +533,126 @@ views:
                       service: script.set_bender_safe_current
                       data:
                         current: 16
+
+  # ==============================================================================
+  # VIEW 3: DEBUGGING (Logging & Diagnostiek)
+  # ==============================================================================
+  - title: Debugging
+    path: debugging
+    icon: mdi:bug
+    panel: true
+    cards:
+      - type: horizontal-stack
+        cards:
+          # ==================== KOLOM 1: FOUTMELDINGEN ====================
+          - type: vertical-stack
+            cards:
+              - type: entities
+                title: "🚨 Actieve Fouten (ERROR_CODES)"
+                show_header_toggle: false
+                entities:
+                  - entity: sensor.bender_error_status
+                    name: Foutmelding
+                    icon: mdi:alert-circle
+                    card_mod:
+                      style: |
+                        :host {
+                          --card-mod-icon-color:
+                            {% if states(config.entity) == 'Geen fouten' %} #4caf50
+                            {% else %} #f44336
+                            {% endif %};
+                        }
+                  - entity: sensor.bender_error_code
+                    name: Error Code (raw)
+                    icon: mdi:code-braces
+
+              - type: markdown
+                title: "📋 Error Codes Legenda"
+                content: |
+                  | Code | Betekenis |
+                  |------|-----------|
+                  | 0x0001 | Reststroom gedetecteerd |
+                  | 0x0002 | Voertuig meldt fout |
+                  | 0x0004 | Diode check mislukt |
+                  | 0x0008 | MCB Type 2 uitgevallen |
+                  | 0x0010 | MCB Schuko uitgevallen |
+                  | 0x0020 | Aardlekschakelaar (RCD) |
+                  | 0x0040 | Contactor vastgelast |
+                  | 0x0080 | Backend verbinding verbroken |
+                  | 0x0100 | Stekker vergrendeling mislukt |
+                  | 0x0200 | Vergrendeling fout |
+                  | 0x0400 | Actuator vastzittend |
+                  | 0x0800 | Actuator detectie mislukt |
+                  | 0x1000 | Firmware update bezig |
+                  | 0x2000 | Laadpaal gekanteld |
+                  | 0x4000 | CP/PR bedrading fout |
+                  | 0x8000 | Overbelasting |
+
+          # ==================== KOLOM 2: EVENT LOG ====================
+          - type: vertical-stack
+            cards:
+              - type: entities
+                title: "📜 Historische Events (ERROR_EVENTS)"
+                show_header_toggle: false
+                entities:
+                  - entity: sensor.bender_event_log
+                    name: Event Log
+                    icon: mdi:history
+                    card_mod:
+                      style: |
+                        :host {
+                          --card-mod-icon-color:
+                            {% if states(config.entity) == 'Geen events' %} #4caf50
+                            {% else %} #ff9800
+                            {% endif %};
+                        }
+                  - entity: sensor.bender_error_events
+                    name: Event Code (raw)
+                    icon: mdi:code-braces
+
+              - type: markdown
+                title: "📋 Event Codes Legenda"
+                content: |
+                  | Code | Betekenis |
+                  |------|-----------|
+                  | 0x0004 | Reboot uitgevoerd |
+                  | 0x0008 | Autorisatie mislukt |
+                  | 0x0010 | Autorisatie mislukt (stil) |
+                  | 0x0040 | Firmware update mislukt |
+                  | 0x0100 | Package manager fout |
+                  | 0x0200 | Onverwachte reset (stroomuitval) |
+                  | 0x0400 | Transactie gestopt na reset |
+                  | 0x0800 | Slave losgekoppeld |
+                  | 0x1000 | Diagnostiek mislukt |
+                  | 0x2000 | RCMB fout |
+                  | 0x8000 | ISO 15118 communicatie fout |
+
+          # ==================== KOLOM 3: RAW MODBUS DATA ====================
+          - type: vertical-stack
+            cards:
+              - type: entities
+                title: "🔧 Raw Modbus Data"
+                show_header_toggle: false
+                entities:
+                  - entity: sensor.bender_chargepointstate
+                    name: ChargePointState (104)
+                  - entity: sensor.bender_vehicle_state
+                    name: Vehicle State CP (122)
+                  - entity: sensor.bender_safecurrent
+                    name: SafeCurrent (131)
+                  - entity: sensor.bender_hems_limit
+                    name: HEMS Limit (1000)
+                  - entity: sensor.bender_ev_battery_soc
+                    name: EV Battery SOC raw (730)
+                  - type: section
+                    label: "Sessie"
+                  - entity: sensor.bender_session_energy
+                    name: Session Energy Wh (716)
+                  - entity: sensor.bender_session_duration
+                    name: Session Duration sec (718)
+                  - type: section
+                    label: "Vermogen"
+                  - entity: sensor.bender_totalpower
+                    name: Total Power (220)
+                  - entity: sensor.bender_lifetime_energy
+                    name: Lifetime Energy (218)

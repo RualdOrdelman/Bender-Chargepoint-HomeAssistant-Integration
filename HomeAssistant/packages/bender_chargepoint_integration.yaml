@@ -16,6 +16,13 @@ modbus:
         input_type: holding
         data_type: uint16
         scan_interval: 10
+      # Vehicle State / Control Pilot State (R) - IEC 61851-1
+      - name: "Bender_Vehicle_State"
+        slave: 1
+        address: 122
+        input_type: holding
+        data_type: uint16
+        scan_interval: 10
       # Safe Current (R/W) - 131
       - name: "Bender_SafeCurrent"
         slave: 1
@@ -74,8 +81,8 @@ modbus:
         unit_of_measurement: "mA"
         device_class: current
         scan_interval: 10
-      # Total Energy & Power (R) - 32-bit
-      - name: "Bender_TotalEnergy"
+      # Lifetime Energy - Total energy ever charged (R) - 32-bit
+      - name: "Bender_Lifetime_Energy"
         slave: 1
         address: 218
         input_type: holding
@@ -100,6 +107,24 @@ modbus:
         data_type: uint16
         unit_of_measurement: "A"
         scan_interval: 30
+      # Session Energy - Charged energy current session (R) - 32-bit
+      - name: "Bender_Session_Energy"
+        slave: 1
+        address: 716
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "Wh"
+        device_class: energy
+        scan_interval: 30
+      # Session Duration - Charge duration in seconds (R) - 32-bit
+      - name: "Bender_Session_Duration"
+        slave: 1
+        address: 718
+        input_type: holding
+        data_type: uint32
+        unit_of_measurement: "s"
+        device_class: duration
+        scan_interval: 30
       # EV Battery State / SOC (R)
       - name: "Bender_EV_Battery_SOC"
         slave: 1
@@ -117,6 +142,14 @@ modbus:
         data_type: uint32
         swap: word
         scan_interval: 10
+      # Error Events (R) - Bitmask for historical events (32-bit: registers 158-159)
+      - name: "Bender_Error_Events"
+        slave: 1
+        address: 158
+        input_type: holding
+        data_type: uint32
+        swap: word
+        scan_interval: 60
 
 
 ###########################################################################################################
@@ -236,15 +269,61 @@ template:
           {% set state = states('sensor.bender_chargepointstate') | int(-1) %}
           {% if state == 0 %}Available
           {% elif state == 1 %}Occupied
-          {% elif state == 2 %}Charging
-          {% elif state == 3 %}SuspendedEV
-          {% elif state == 4 %}SuspendedEVSE
-          {% elif state == 5 %}Finishing
-          {% elif state == 6 %}Reserved
-          {% elif state == 7 %}Unavailable
-          {% elif state == 8 %}Faulted
+          {% elif state == 2 %}Reserved
+          {% elif state == 3 %}Unavailable
+          {% elif state == 4 %}Faulted
+          {% elif state == 5 %}Preparing
+          {% elif state == 6 %}Charging
+          {% elif state == 7 %}SuspendedEVSE
+          {% elif state == 8 %}SuspendedEV
+          {% elif state == 9 %}Finishing
           {% else %}Unknown
           {% endif %}
+
+      # Vehicle State (Control Pilot) - IEC 61851-1 translation
+      - name: "Bender Vehicle Status"
+        unique_id: "bender_vehicle_status"
+        icon: mdi:car-electric
+        state: >
+          {% set state = states('sensor.bender_vehicle_state') | int(-1) %}
+          {% if state == 1 %}A - Niet aangesloten
+          {% elif state == 2 %}B - Aangesloten, niet (meer) aan het laden
+          {% elif state == 3 %}C - Laden actief
+          {% elif state == 4 %}D - Laden met ventilatie
+          {% elif state == 5 %}E - Fout
+          {% else %}Onbekend
+          {% endif %}
+        attributes:
+          state_code: "{{ states('sensor.bender_vehicle_state') | int(-1) }}"
+          state_letter: >
+            {% set state = states('sensor.bender_vehicle_state') | int(-1) %}
+            {% if state == 1 %}A
+            {% elif state == 2 %}B
+            {% elif state == 3 %}C
+            {% elif state == 4 %}D
+            {% elif state == 5 %}E
+            {% else %}?
+            {% endif %}
+
+      # Session Energy in kWh
+      - name: "Bender Session Energy kWh"
+        unique_id: "bender_session_energy_kwh"
+        icon: mdi:lightning-bolt
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state: >
+          {% set wh = states('sensor.bender_session_energy') | float(0) %}
+          {{ (wh / 1000) | round(2) }}
+
+      # Session Duration in readable format (H:MM)
+      - name: "Bender Session Duration"
+        unique_id: "bender_session_duration_formatted"
+        icon: mdi:timer-outline
+        state: >
+          {% set secs = states('sensor.bender_session_duration') | int(0) %}
+          {% set hours = (secs // 3600) %}
+          {% set minutes = ((secs % 3600) // 60) %}
+          {{ hours }}:{{ '%02d' | format(minutes) }}
 
       # EV Battery SOC - Filters 65535 (unavailable) value
       - name: "Bender EV SOC"
@@ -291,6 +370,33 @@ template:
         attributes:
           error_code: "{{ states('sensor.bender_error_code') | int(0) }}"
           has_error: "{{ states('sensor.bender_error_code') | int(0) > 0 }}"
+
+      # Error Events Translation - Converts bitmask to readable event messages
+      - name: "Bender Event Log"
+        unique_id: "bender_event_log"
+        icon: mdi:history
+        state: >
+          {% set code = states('sensor.bender_error_events') | int(0) %}
+          {% if code == 0 %}
+            Geen events
+          {% else %}
+            {% set events = [] %}
+            {% if code | bitwise_and(0x0004) %}{% set events = events + ['Reboot uitgevoerd'] %}{% endif %}
+            {% if code | bitwise_and(0x0008) %}{% set events = events + ['Autorisatie mislukt'] %}{% endif %}
+            {% if code | bitwise_and(0x0010) %}{% set events = events + ['Autorisatie mislukt (zonder notificatie)'] %}{% endif %}
+            {% if code | bitwise_and(0x0040) %}{% set events = events + ['Firmware update mislukt'] %}{% endif %}
+            {% if code | bitwise_and(0x0100) %}{% set events = events + ['Firmware package manager fout'] %}{% endif %}
+            {% if code | bitwise_and(0x0200) %}{% set events = events + ['Onverwachte reset (stroomuitval?)'] %}{% endif %}
+            {% if code | bitwise_and(0x0400) %}{% set events = events + ['Transactie gestopt na reset'] %}{% endif %}
+            {% if code | bitwise_and(0x0800) %}{% set events = events + ['Slave losgekoppeld van master'] %}{% endif %}
+            {% if code | bitwise_and(0x1000) %}{% set events = events + ['Diagnostiek mislukt'] %}{% endif %}
+            {% if code | bitwise_and(0x2000) %}{% set events = events + ['RCMB fout'] %}{% endif %}
+            {% if code | bitwise_and(0x8000) %}{% set events = events + ['ISO 15118 communicatie mislukt'] %}{% endif %}
+            {{ events | join(', ') if events else 'Onbekend event (' ~ code ~ ')' }}
+          {% endif %}
+        attributes:
+          event_code: "{{ states('sensor.bender_error_events') | int(0) }}"
+          has_events: "{{ states('sensor.bender_error_events') | int(0) > 0 }}"
 
       # Available PV surplus power (negative P1 = exporting = available)
       - name: "Bender PV Available Power"
