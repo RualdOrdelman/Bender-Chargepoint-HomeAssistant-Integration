@@ -240,7 +240,7 @@ views:
                   - entity: sensor.bender_session_energy_kwh
                     name: Laatste/Huidige Sessie Energie
                     icon: mdi:battery-charging
-                  - entity: sensor.bender_session_duration
+                  - entity: sensor.bender_session_duration_formatted
                     name: Laatste/Huidige Sessie Duur
                     icon: mdi:timer-outline
                   - type: section

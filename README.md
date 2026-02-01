@@ -12,7 +12,7 @@ Dit project zorgt ervoor dat je jouw elektrische auto slim kunt opladen via een 
 Je kunt op elk moment kiezen uit 5 standen:
 
 1.  **Uit**: De laadpaal is vergrendeld. Er kan niet geladen worden.
-2.  **Direct**: De auto begint lmeteen te laden op maximale snelheid (standaard 16A, tenzij begrensd door de Load Balancer). Handig als je haast hebt.
+2.  **Direct**: De auto begint meteen te laden op maximale snelheid (standaard 16A, tenzij begrensd door de Load Balancer). Handig als je haast hebt.
 3.  **Manual**: Handbediening. Jij bepaalt zelf via het dashboard de laadstroom (6A, 10A of 16A).
 4.  **ChargePV (Zonneladen)**: Het systeem kijkt naar je slimme meter (P1).
     *   Is er stroom over? Dan gaat dat naar de auto.
@@ -35,9 +35,18 @@ Dit systeem beschermt je meterkast (zekeringen) tegen overbelasting. Dit is voor
     *   Zodra er weer ruimte is, start het laden vanzelf weer.
 
 ### 📱 Het Dashboard
-Het dashboard is ingericht in twee tabbladen:
-1.  **Laadpaal:** Voor dagelijks gebruik. Starten/stoppen, strategie kiezen en live verbruik zien.
+Het dashboard is ingericht in drie tabbladen:
+1.  **Laadpaal:** Voor dagelijks gebruik. Strategie kiezen, live status en verbruik zien.
 2.  **Instellingen:** Voor configuratie. Hier stel je o.a. de Load Balancer marge in en de capaciteit van je huisaansluiting.
+3.  **Debugging:** Voor probleemoplossing. Toont actieve foutmeldingen, historische events en raw Modbus data.
+
+### 🔍 Uitgebreide Monitoring
+Het systeem biedt gedetailleerde informatie over je laadsessie:
+*   **Voertuig Status (Control Pilot):** Toont de IEC 61851-1 state (A t/m E) - van "niet aangesloten" tot "laden actief".
+*   **EV Batterij SOC:** State of Charge van je auto (indien ondersteund door het voertuig).
+*   **Sessie Energie & Duur:** Hoeveel kWh er geladen is en hoe lang de huidige/laatste sessie duurt.
+*   **Foutmeldingen:** Automatische vertaling van Bender error codes naar leesbare Nederlandse meldingen.
+*   **Event Log:** Historische events zoals reboots, autorisatiepogingen en firmware updates.
 
 ---
 
@@ -56,10 +65,12 @@ Het dashboard is ingericht in twee tabbladen:
     modbus:
       - name: modbus_hub
         type: tcp
-        host: 192.168.4.191  <-- PAS DIT AAN NAAR JOUW IP
+        host: 192.168.x.x  # <-- PAS DIT AAN NAAR HET IP VAN JOUW BENDER
         port: 502
     ```
-3.  Controleer of de **DSMR sensoren** in het bestand (onder `template: sensor:`) overeenkomen met de namen van jouw slimme meter entiteiten (bijv. `sensor.dsmr_reading_phase_currently_delivered_l1`).
+3.  Controleer of de **DSMR sensoren** in het bestand overeenkomen met de namen van jouw slimme meter entiteiten:
+    *   Per-fase sensoren: `sensor.dsmr_reading_phase_currently_delivered_l1` (en L2, L3)
+    *   Totaal vermogen: `sensor.p1_meter_power` (voor ChargePV strategie)
 4.  Herstart Home Assistant.
 
 ### Stap 2: Dashboard Configureren
@@ -89,4 +100,4 @@ De logica van de strategieën draait in Node-RED.
 5.  Ga naar het **Laadpaal** tabblad en test de strategie "Manual" om te kijken of de communicatie met de Bender werkt.
 
 ---
-*Gegenereerd door Antigravity Assistant - 2025*
+*Laatst bijgewerkt: Februari 2026*
