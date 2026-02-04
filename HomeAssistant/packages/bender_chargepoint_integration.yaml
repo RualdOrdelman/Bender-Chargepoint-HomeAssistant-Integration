@@ -566,6 +566,34 @@ template:
             16.0
           {% endif %}
 
+      # DSMR Data Freshness - Shows how old the P1 meter data is
+      - name: "Bender DSMR Data Leeftijd"
+        unique_id: "bender_dsmr_data_leeftijd"
+        unit_of_measurement: "s"
+        icon: mdi:clock-alert
+        state: >
+          {% set last = states.sensor.dsmr_reading_phase_currently_delivered_l1.last_updated %}
+          {% if last is defined and last is not none %}
+            {{ (now() - last).total_seconds() | round(0) }}
+          {% else %}
+            unknown
+          {% endif %}
+        attributes:
+          last_update: >
+            {% set last = states.sensor.dsmr_reading_phase_currently_delivered_l1.last_updated %}
+            {% if last is defined and last is not none %}
+              {{ last.strftime('%H:%M:%S') }}
+            {% else %}
+              unknown
+            {% endif %}
+          stale: >
+            {% set last = states.sensor.dsmr_reading_phase_currently_delivered_l1.last_updated %}
+            {% if last is defined and last is not none %}
+              {{ (now() - last).total_seconds() > 30 }}
+            {% else %}
+              true
+            {% endif %}
+
       # Total Power available for Charger (Visual Only)
       # Based on the bottleneck current * 3 phases * 230V
       - name: "Bender Loadbalancer Available Power"

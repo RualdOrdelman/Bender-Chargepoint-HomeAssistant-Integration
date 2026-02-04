@@ -451,6 +451,19 @@ views:
                   - entity: sensor.bender_lb_available_current_l3
                     name: Beschikbaar L3
                   - type: section
+                    label: "Data Actualiteit"
+                  - entity: sensor.bender_dsmr_data_leeftijd
+                    name: DSMR Data Leeftijd
+                    icon: mdi:clock-alert
+                    card_mod:
+                      style: |
+                        :host {
+                          --card-mod-icon-color:
+                            {% if states(config.entity) | int(999) > 30 %} #f44336
+                            {% else %} #4caf50
+                            {% endif %};
+                        }
+                  - type: section
                     label: "Hardware Settings"
                   - entity: input_number.bender_house_max_power
                     name: Huisaansluiting Capaciteit
@@ -616,3 +629,16 @@ views:
                     name: Total Power (220)
                   - entity: sensor.bender_lifetime_energy
                     name: Lifetime Energy (218)
+                  - type: section
+                    label: "Data Actualiteit"
+                  - entity: sensor.bender_dsmr_data_leeftijd
+                    name: DSMR Data Leeftijd
+                    icon: mdi:clock-alert
+                    card_mod:
+                      style: |
+                        :host {
+                          --card-mod-icon-color:
+                            {% if states(config.entity) | int(999) > 30 %} #f44336
+                            {% else %} #4caf50
+                            {% endif %};
+                        }
