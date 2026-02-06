@@ -229,7 +229,7 @@
         "type": "delay",
         "z": "bender_strategy_master",
         "g": "bender_master_group",
-        "name": "Rate limit 10s",
+        "name": "Rate limit 5s",
         "pauseType": "rate",
         "timeout": "5",
         "timeoutUnits": "seconds",
