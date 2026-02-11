@@ -5,6 +5,7 @@
 # User Configuration (Secrets)
 HomeAssistant/configuration.yaml
 secrets.yaml
+HomeAssistant/packages/*_private.yaml
 
 # Logs
 *.log

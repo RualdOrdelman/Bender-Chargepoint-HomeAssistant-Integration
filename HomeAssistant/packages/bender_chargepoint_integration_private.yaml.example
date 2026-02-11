@@ -1,0 +1,35 @@
+###########################################################################################################
+# PRIVATE SCRIPTS - RFID Card Simulation (TEMPLATE)
+#
+# Copy this file to bender_chargepoint_integration_private.yaml and fill in your
+# own RFID card register values.
+#
+# To find your card's register values, use modpoll to sniff the card ID:
+#   ./modpoll -m tcp -a 1 -r 1111 -c 10 -t 4 <charger-ip>
+# Then present your card and read back the values.
+#
+# Note: modpoll uses 1-based register addressing, HA Modbus uses 0-based,
+# so modpoll register 1111 = HA address 1110.
+###########################################################################################################
+script:
+  bender_rfid_user1:
+    alias: "Bender RFID Pas User1"
+    icon: mdi:card-account-details
+    sequence:
+      - service: modbus.write_register
+        data:
+          hub: modbus_hub
+          slave: 1
+          address: 1110
+          value: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Replace with your card's register values
+
+  bender_rfid_user2:
+    alias: "Bender RFID Pas User2"
+    icon: mdi:card-account-details-outline
+    sequence:
+      - service: modbus.write_register
+        data:
+          hub: modbus_hub
+          slave: 1
+          address: 1110
+          value: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # Replace with your card's register values

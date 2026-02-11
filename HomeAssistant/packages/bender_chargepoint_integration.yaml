@@ -647,6 +647,8 @@ template:
             {% set departure_ts = as_timestamp(departure) %}
             {% set start_ts = departure_ts - (hours_needed * 3600) %}
             {{ start_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}
+          {% elif hours_needed == 0 %}
+            Niet nodig
           {% else %}
             unknown
           {% endif %}
@@ -790,3 +792,6 @@ script:
                   value: "Laden op {{ safe_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})"
         default:
           - service: script.bender_stop_charging
+
+  # RFID Card Simulation scripts are in bender_chargepoint_integration_private.yaml
+  # (excluded from public repo - see .yaml.example for template)

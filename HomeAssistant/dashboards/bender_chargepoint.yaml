@@ -510,6 +510,32 @@ views:
                       data:
                         current: 16
 
+              - type: entities
+                title: "🔑 Sessie Starten/Stoppen (RFID)"
+                entities:
+                  - type: section
+                    label: "Simuleert een pasbadge om sessie te starten of stoppen"
+              - type: horizontal-stack
+                cards:
+                  - type: button
+                    name: "Pas Ruald"
+                    icon: mdi:card-account-details
+                    icon_height: 40px
+                    tap_action:
+                      action: call-service
+                      service: script.bender_rfid_ruald
+                      confirmation:
+                        text: "Pas Ruald aanbieden? Dit start of stopt de laadsessie."
+                  - type: button
+                    name: "Pas Ellen"
+                    icon: mdi:card-account-details-outline
+                    icon_height: 40px
+                    tap_action:
+                      action: call-service
+                      service: script.bender_rfid_ellen
+                      confirmation:
+                        text: "Pas Ellen aanbieden? Dit start of stopt de laadsessie."
+
   # ==============================================================================
   # VIEW 3: DEBUGGING (Logging & Diagnostiek)
   # ==============================================================================
@@ -615,8 +641,6 @@ views:
                     name: SafeCurrent (131)
                   - entity: sensor.bender_hems_limit
                     name: HEMS Limit (1000)
-                  - entity: sensor.bender_ev_battery_soc
-                    name: EV Battery SOC raw (730)
                   - type: section
                     label: "Sessie"
                   - entity: sensor.bender_session_energy
