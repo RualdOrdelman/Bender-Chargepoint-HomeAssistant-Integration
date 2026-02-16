@@ -713,6 +713,7 @@ script:
   bender_start_charging:
     alias: "Bender Start Laden (Max)"
     icon: mdi:play-circle
+    mode: restart
     sequence:
       - variables:
           max_config: "{{ states('input_number.bender_strategy_max_current') | int(16) }}"
@@ -756,6 +757,7 @@ script:
   bender_set_charging_current:
     alias: "Bender Stel Laadstroom In"
     icon: mdi:current-ac
+    mode: restart
     fields:
       current:
         description: "Laadstroom per fase in Ampère"
