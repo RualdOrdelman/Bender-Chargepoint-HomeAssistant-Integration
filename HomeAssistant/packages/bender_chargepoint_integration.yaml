@@ -247,6 +247,11 @@ input_text:
     icon: mdi:information
     max: 255
 
+  bender_hems_change_context:
+    name: "Laatste HEMS wijziging context"
+    icon: mdi:text-box-search
+    max: 255
+
 ###########################################################################################################
 # INPUT BOOLEAN
 ###########################################################################################################
@@ -710,6 +715,40 @@ script:
           address: 1000
           value: "{{ current | int }}"
 
+      # ---- Logging: leg vast waarom de limiet op dit moment werd ingesteld ----
+      - variables:
+          _lb:     "{{ states('sensor.bender_loadbalancer_available_current') | float(0) | round(1) }}"
+          _lb_l1:  "{{ states('sensor.bender_lb_available_current_l1') | float(0) | round(1) }}"
+          _lb_l2:  "{{ states('sensor.bender_lb_available_current_l2') | float(0) | round(1) }}"
+          _lb_l3:  "{{ states('sensor.bender_lb_available_current_l3') | float(0) | round(1) }}"
+          _g_l1:   "{{ ((states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000) | round(0) | int }}"
+          _g_l2:   "{{ ((states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000) | round(0) | int }}"
+          _g_l3:   "{{ ((states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000) | round(0) | int }}"
+          _ch_l1:  "{{ (states('sensor.bender_current_l1') | float(0) / 1000) | round(1) }}"
+          _ch_l2:  "{{ (states('sensor.bender_current_l2') | float(0) / 1000) | round(1) }}"
+          _ch_l3:  "{{ (states('sensor.bender_current_l3') | float(0) / 1000) | round(1) }}"
+          _dsmr:   "{{ states('sensor.bender_dsmr_data_leeftijd') | int(0) }}"
+          _strat:  "{{ states('input_select.bender_charging_strategy') }}"
+          _max:    "{{ states('input_number.bender_house_max_power') | float(0) | round(0) | int }}"
+          _margin: "{{ states('input_number.bender_loadbalancer_margin') | float(0) | round(0) | int }}"
+
+      - service: logbook.log
+        data:
+          name: "HEMS Limiet Ingesteld"
+          message: >
+            → {{ current }}A | LB: {{ _lb }}A (L1:{{ _lb_l1 }} L2:{{ _lb_l2 }} L3:{{ _lb_l3 }}) |
+            Grid L1:{{ _g_l1 }}W L2:{{ _g_l2 }}W L3:{{ _g_l3 }}W |
+            Laadpaal L1:{{ _ch_l1 }}A L2:{{ _ch_l2 }}A L3:{{ _ch_l3 }}A |
+            DSMR:{{ _dsmr }}s | Max:{{ _max }}W Marge:{{ _margin }}W | {{ _strat }}
+          entity_id: sensor.bender_hems_limit
+
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.bender_hems_change_context
+        data:
+          value: >
+            {{ now().strftime('%H:%M:%S') }} →{{ current }}A LB:{{ _lb }}A ({{ _lb_l1 }}/{{ _lb_l2 }}/{{ _lb_l3 }}) Grid:{{ _g_l1 }}/{{ _g_l2 }}/{{ _g_l3 }}W Ch:{{ _ch_l1 }}/{{ _ch_l2 }}/{{ _ch_l3 }}A DSMR:{{ _dsmr }}s
+
   bender_start_charging:
     alias: "Bender Start Laden (Max)"
     icon: mdi:play-circle
@@ -797,3 +836,51 @@ script:
 
   # RFID Card Simulation scripts are in bender_chargepoint_integration_private.yaml
   # (excluded from public repo - see .yaml.example for template)
+
+###########################################################################################################
+# AUTOMATIONS - HEMS LIMIET MONITOR
+###########################################################################################################
+automation:
+
+  # Logt elke bevestigde Modbus read-back wijziging van de HEMS limiet.
+  # Dit vangt OOK wijzigingen die NIET via onze scripts gaan (bijv. Node-RED directe Modbus write).
+  # Scan interval sensor.bender_hems_limit = 30s, dus er is max. 30s vertraging t.o.v. de werkelijke write.
+  - alias: "Bender HEMS Limiet Monitor - Log Modbus Wijziging"
+    id: "bender_hems_limit_monitor_modbus"
+    description: "Logt elke bevestigde Modbus-wijziging van HEMS limiet (register 1000) met volledige LB-context"
+    trigger:
+      - platform: state
+        entity_id: sensor.bender_hems_limit
+    condition:
+      - condition: template
+        value_template: >
+          {{ trigger.from_state is not none
+             and trigger.to_state is not none
+             and trigger.from_state.state not in ['unknown', 'unavailable']
+             and trigger.to_state.state not in ['unknown', 'unavailable']
+             and trigger.from_state.state != trigger.to_state.state }}
+    action:
+      - variables:
+          _old:    "{{ trigger.from_state.state }}"
+          _new:    "{{ trigger.to_state.state }}"
+          _lb:     "{{ states('sensor.bender_loadbalancer_available_current') | float(0) | round(1) }}"
+          _lb_l1:  "{{ states('sensor.bender_lb_available_current_l1') | float(0) | round(1) }}"
+          _lb_l2:  "{{ states('sensor.bender_lb_available_current_l2') | float(0) | round(1) }}"
+          _lb_l3:  "{{ states('sensor.bender_lb_available_current_l3') | float(0) | round(1) }}"
+          _g_l1:   "{{ ((states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000) | round(0) | int }}"
+          _g_l2:   "{{ ((states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000) | round(0) | int }}"
+          _g_l3:   "{{ ((states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000) | round(0) | int }}"
+          _ch_l1:  "{{ (states('sensor.bender_current_l1') | float(0) / 1000) | round(1) }}"
+          _ch_l2:  "{{ (states('sensor.bender_current_l2') | float(0) / 1000) | round(1) }}"
+          _ch_l3:  "{{ (states('sensor.bender_current_l3') | float(0) / 1000) | round(1) }}"
+          _dsmr:   "{{ states('sensor.bender_dsmr_data_leeftijd') | int(0) }}"
+          _strat:  "{{ states('input_select.bender_charging_strategy') }}"
+      - service: logbook.log
+        data:
+          name: "HEMS Limiet Gewijzigd (Modbus)"
+          message: >
+            {{ _old }}A → {{ _new }}A | LB beschikbaar: {{ _lb }}A (L1:{{ _lb_l1 }} L2:{{ _lb_l2 }} L3:{{ _lb_l3 }}) |
+            Grid L1:{{ _g_l1 }}W L2:{{ _g_l2 }}W L3:{{ _g_l3 }}W |
+            Laadpaal L1:{{ _ch_l1 }}A L2:{{ _ch_l2 }}A L3:{{ _ch_l3 }}A |
+            DSMR:{{ _dsmr }}s | {{ _strat }}
+          entity_id: sensor.bender_hems_limit

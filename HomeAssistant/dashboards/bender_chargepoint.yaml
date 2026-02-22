@@ -667,3 +667,72 @@ views:
                             {% else %} #4caf50
                             {% endif %};
                         }
+
+          # ==================== KOLOM 4: HEMS LIMIET LOG ====================
+          - type: vertical-stack
+            cards:
+              - type: entities
+                title: "📊 HEMS Limiet Log - Laatste Wijziging"
+                show_header_toggle: false
+                entities:
+                  - entity: input_text.bender_hems_change_context
+                    name: Context (script-moment)
+                    icon: mdi:text-box-search
+                  - type: section
+                    label: "Realtime LB-waarden"
+                  - entity: sensor.bender_hems_limit
+                    name: HEMS Limiet (huidig)
+                  - entity: sensor.bender_loadbalancer_available_current
+                    name: LB Beschikbaar (bottleneck)
+                  - entity: sensor.bender_lb_available_current_l1
+                    name: LB Beschikbaar L1
+                  - entity: sensor.bender_lb_available_current_l2
+                    name: LB Beschikbaar L2
+                  - entity: sensor.bender_lb_available_current_l3
+                    name: LB Beschikbaar L3
+                  - type: section
+                    label: "Grid per fase (incl. laadpaal)"
+                  - entity: sensor.bender_house_consumption_l1
+                    name: Huis L1 (excl. laadpaal)
+                  - entity: sensor.bender_house_consumption_l2
+                    name: Huis L2 (excl. laadpaal)
+                  - entity: sensor.bender_house_consumption_l3
+                    name: Huis L3 (excl. laadpaal)
+                  - type: section
+                    label: "Laadpaal stroom per fase"
+                  - entity: sensor.bender_current_l1
+                    name: Laadpaal L1 (mA)
+                  - entity: sensor.bender_current_l2
+                    name: Laadpaal L2 (mA)
+                  - entity: sensor.bender_current_l3
+                    name: Laadpaal L3 (mA)
+
+              - type: history-graph
+                title: "📈 HEMS Limiet Historie"
+                hours_to_show: 4
+                entities:
+                  - entity: sensor.bender_hems_limit
+                    name: HEMS Limiet
+                  - entity: sensor.bender_loadbalancer_available_current
+                    name: LB Beschikbaar
+
+              - type: logbook
+                title: "📋 HEMS Logboek (48 uur)"
+                hours_to_show: 48
+                entities:
+                  - sensor.bender_hems_limit
+                  - input_text.bender_hems_change_context
+
+              - type: markdown
+                title: "ℹ️ Hoe te interpreteren"
+                content: |
+                  **HEMS Limiet Ingesteld** (logbook) = moment van schrijven naar Modbus.
+                  Hier zie je de LB-waarden *op het moment van de beslissing*.
+
+                  **HEMS Limiet Gewijzigd (Modbus)** (logbook) = bevestigde register-wijziging (max. 30s later).
+                  Vangt ook wijzigingen buiten HA scripts om (bijv. Node-RED).
+
+                  **Let op bij vreemd gedrag:**
+                  - `Laadpaal L1/L2/L3 = 0` terwijl auto laadt → LB telt laadstroom niet terug → onterecht lager limiet
+                  - `DSMR leeftijd > 30s` → verouderde P1-data → LB-berekening klopt niet
+                  - `LB beschikbaar >> HEMS limiet` → instelling niet door LB beperkt, andere oorzaak
