@@ -280,6 +280,21 @@ views:
                   type: horizontal-stack
                   cards:
                     - type: button
+                      name: "Pauze"
+                      icon: mdi:pause-circle
+                      icon_height: 30px
+                      tap_action:
+                        action: call-service
+                        service: script.bender_stop_charging
+                      card_mod:
+                        style: |
+                          ha-card {
+                            {% if states('sensor.bender_hems_limit') | int(0) == 0 %}
+                            background-color: rgba(255, 152, 0, 0.2);
+                            border: 1px solid rgba(255, 152, 0, 0.5);
+                            {% endif %}
+                          }
+                    - type: button
                       name: "6A"
                       icon: mdi:current-ac
                       tap_action:
