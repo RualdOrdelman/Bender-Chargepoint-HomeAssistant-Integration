@@ -134,6 +134,15 @@ modbus:
         unit_of_measurement: "%"
         device_class: battery
         scan_interval: 60
+      # IDTag - Active session RFID tag identifier (R) - 10 registers (20 chars UTF-8)
+      # modpoll registers 721-730 = HA address 720-729
+      - name: "Bender_IDTag"
+        slave: 1
+        address: 720
+        input_type: holding
+        data_type: string
+        count: 10
+        scan_interval: 30
       # Error Codes (R) - Bitmask for active errors (32-bit: registers 105-106)
       - name: "Bender_Error_Code"
         slave: 1
@@ -238,6 +247,12 @@ input_datetime:
     has_time: true
     icon: mdi:clock-start
 
+  bender_manual_stop_time:
+    name: Sessie stoptijd
+    has_date: false
+    has_time: true
+    icon: mdi:clock-stop
+
 ###########################################################################################################
 # INPUT TEXT
 ###########################################################################################################
@@ -263,6 +278,10 @@ input_boolean:
   bender_loadbalancer_enabled:
     name: Load Balancer Actief
     icon: mdi:scale-balance
+
+  bender_manual_stop_scheduled:
+    name: Sessie stop gepland
+    icon: mdi:calendar-clock
 
 ###########################################################################################################
 # TEMPLATE SENSORS
@@ -309,6 +328,22 @@ template:
             {% elif state == 5 %}E
             {% else %}?
             {% endif %}
+
+      # Session Owner - Matches IDTag to known RFID cards
+      - name: "Bender Session Owner"
+        unique_id: "bender_session_owner"
+        icon: mdi:card-account-details
+        state: >
+          {% set tag = states('sensor.bender_idtag') | trim %}
+          {% if tag in ['', 'unknown', 'unavailable'] %}
+            Geen sessie
+          {% elif tag == '044d0182153c84' %}
+            Ruald
+          {% elif tag == '04c2ac3a3f3e80' %}
+            Ellen
+          {% else %}
+            Onbekend ({{ tag }})
+          {% endif %}
 
       # Session Energy in kWh
       - name: "Bender Session Energy kWh"
@@ -834,13 +869,73 @@ script:
         default:
           - service: script.bender_stop_charging
 
+  # Stop active session by presenting the same RFID tag that started it
+  bender_stop_session:
+    alias: "Bender Stop Sessie (RFID)"
+    icon: mdi:stop-circle-outline
+    sequence:
+      - variables:
+          owner: "{{ states('sensor.bender_session_owner') }}"
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ owner == 'Ruald' }}"
+            sequence:
+              - service: script.bender_rfid_ruald
+              - service: input_text.set_value
+                target:
+                  entity_id: input_text.bender_strategy_active_status
+                data:
+                  value: "Sessie beëindigd (pas Ruald)"
+          - conditions:
+              - condition: template
+                value_template: "{{ owner == 'Ellen' }}"
+            sequence:
+              - service: script.bender_rfid_ellen
+              - service: input_text.set_value
+                target:
+                  entity_id: input_text.bender_strategy_active_status
+                data:
+                  value: "Sessie beëindigd (pas Ellen)"
+        default:
+          - service: logbook.log
+            data:
+              name: "Bender Sessie Stop"
+              message: "Kan sessie niet stoppen: eigenaar onbekend ({{ owner }})"
+              entity_id: sensor.bender_session_owner
+
   # RFID Card Simulation scripts are in bender_chargepoint_integration_private.yaml
   # (excluded from public repo - see .yaml.example for template)
 
 ###########################################################################################################
-# AUTOMATIONS - HEMS LIMIET MONITOR
+# AUTOMATIONS
 ###########################################################################################################
 automation:
+
+  # Beëindigt de laadsessie op het ingestelde tijdstip door de juiste RFID-pas aan te bieden
+  - alias: "Bender Manual Sessie Stop op Tijdstip"
+    id: "bender_manual_session_stop_timer"
+    description: "Stopt de laadsessie op het geplande tijdstip door RFID-pas van de sessie-eigenaar te schrijven"
+    trigger:
+      - platform: time
+        at: input_datetime.bender_manual_stop_time
+    condition:
+      - condition: state
+        entity_id: input_boolean.bender_manual_stop_scheduled
+        state: "on"
+      - condition: state
+        entity_id: input_select.bender_charging_strategy
+        state: "Manual"
+    action:
+      - service: script.bender_stop_session
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.bender_manual_stop_scheduled
+      - service: logbook.log
+        data:
+          name: "Bender Sessie Stop"
+          message: "Sessie beëindigd op gepland tijdstip ({{ states('input_datetime.bender_manual_stop_time') }})"
+          entity_id: sensor.bender_session_owner
 
   # Logt elke bevestigde Modbus read-back wijziging van de HEMS limiet.
   # Dit vangt OOK wijzigingen die NIET via onze scripts gaan (bijv. Node-RED directe Modbus write).

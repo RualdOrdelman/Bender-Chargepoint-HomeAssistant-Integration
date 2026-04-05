@@ -319,6 +319,25 @@ views:
                         data:
                           current: 16
 
+              # --- SESSIE STOP PLANNEN (alleen zichtbaar in Manual mode) ---
+              - type: conditional
+                conditions:
+                  - entity: input_select.bender_charging_strategy
+                    state: "Manual"
+                card:
+                  type: entities
+                  title: "🕐 Sessie Stoppen op Tijdstip"
+                  entities:
+                    - entity: sensor.bender_session_owner
+                      name: Actieve sessie
+                      icon: mdi:account
+                    - entity: input_datetime.bender_manual_stop_time
+                      name: Stoptijd
+                      icon: mdi:clock-stop
+                    - entity: input_boolean.bender_manual_stop_scheduled
+                      name: Stop inplannen
+                      icon: mdi:calendar-clock
+
               # --- STROOM PER FASE ---
               - type: glance
                 title: "🔋 Stroom per Fase (mA)"
@@ -659,6 +678,12 @@ views:
                     name: HEMS Limit (1000)
                   - type: section
                     label: "Sessie"
+                  - entity: sensor.bender_idtag
+                    name: IDTag (720)
+                    icon: mdi:card-account-details
+                  - entity: sensor.bender_session_owner
+                    name: Sessie Eigenaar
+                    icon: mdi:account
                   - entity: sensor.bender_session_energy
                     name: Session Energy Wh (716)
                   - entity: sensor.bender_session_duration
