@@ -1,7 +1,7 @@
 modbus:
   - name: modbus_hub
     type: tcp
-    host: 192.168.1.201
+    host: 192.168.1.194
     port: 502
     delay: 0
     message_wait_milliseconds: 30

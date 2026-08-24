@@ -34,9 +34,9 @@
             "bender_dynamic_debug"
         ],
         "x": 14,
-        "y": 19,
-        "w": 1292,
-        "h": 522
+        "y": 39,
+        "w": 1532,
+        "h": 282
     },
     {
         "id": "bender_dynamic_start_link",
@@ -44,9 +44,7 @@
         "z": "bender_strategy_dynamic_tab",
         "g": "bender_dynamic_group",
         "name": "Dynamic Start",
-        "links": [
-            "bender_master_link_dynamic"
-        ],
+        "links": [],
         "x": 65,
         "y": 80,
         "wires": [
@@ -68,7 +66,7 @@
         "onceDelay": 0.1,
         "topic": "",
         "x": 130,
-        "y": 180,
+        "y": 160,
         "wires": [
             [
                 "bender_dynamic_check_active"
@@ -94,8 +92,8 @@
         "for": "0",
         "forType": "num",
         "forUnits": "minutes",
-        "x": 330,
-        "y": 180,
+        "x": 350,
+        "y": 160,
         "wires": [
             [
                 "bender_dynamic_init"
@@ -171,13 +169,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "input_number.bender_strategy_required_kwh",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "dynamic.required_kwh",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -205,13 +203,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "input_number.bender_strategy_max_current",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "dynamic.max_current",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -344,7 +342,7 @@
         "outputProperties": [],
         "queue": "none",
         "blockInputOverrides": false,
-        "x": 780,
+        "x": 760,
         "y": 260,
         "wires": [
             [
@@ -371,7 +369,7 @@
         "checkall": "true",
         "repair": false,
         "outputs": 2,
-        "x": 1000,
+        "x": 980,
         "y": 260,
         "wires": [
             [
@@ -404,8 +402,8 @@
         "outputProperties": [],
         "queue": "none",
         "blockInputOverrides": false,
-        "x": 360,
-        "y": 360,
+        "x": 1220,
+        "y": 220,
         "wires": [
             [
                 "bender_dynamic_status_charging"
@@ -434,8 +432,8 @@
         "outputProperties": [],
         "queue": "none",
         "blockInputOverrides": false,
-        "x": 360,
-        "y": 440,
+        "x": 1220,
+        "y": 280,
         "wires": [
             [
                 "bender_dynamic_status_waiting"
@@ -466,8 +464,8 @@
         "outputProperties": [],
         "queue": "none",
         "blockInputOverrides": false,
-        "x": 600,
-        "y": 360,
+        "x": 1440,
+        "y": 220,
         "wires": [
             []
         ]
@@ -496,8 +494,8 @@
         "outputProperties": [],
         "queue": "none",
         "blockInputOverrides": false,
-        "x": 600,
-        "y": 440,
+        "x": 1440,
+        "y": 280,
         "wires": [
             []
         ]
@@ -516,8 +514,8 @@
         "targetType": "msg",
         "statusVal": "dynamic.should_charge",
         "statusType": "msg",
-        "x": 530,
-        "y": 180,
+        "x": 750,
+        "y": 200,
         "wires": []
     }
 ]

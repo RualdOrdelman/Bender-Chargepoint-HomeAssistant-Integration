@@ -23,10 +23,10 @@
             "bender_manual_lb_cap",
             "bender_manual_debug"
         ],
-        "x": 14,
+        "x": 24,
         "y": 19,
-        "w": 892,
-        "h": 242
+        "w": 952,
+        "h": 222
     },
     {
         "id": "bender_manual_start_link",
@@ -58,13 +58,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "sensor.bender_hems_limit",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "manual_hems",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -92,13 +92,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "sensor.bender_loadbalancer_available_current",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "manual_lb",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
