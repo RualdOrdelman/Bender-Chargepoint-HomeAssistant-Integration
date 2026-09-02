@@ -1,103 +1,380 @@
-# Bender Laadpaal Integratie
+# Bender Chargepoint Home Assistant-integratie
 
-Een complete Home Assistant & Node-RED integratie voor de **Bender CC613** laadpaal controller, inclusief slimme laadstrategieën en Load Balancing.
+Home Assistant- en Node-RED-integratie voor een laadpaal met een **Bender CC613-controller** via Modbus TCP. Het project bevat uitlezing en bediening van de laadpaal, vijf laadstrategieën, driefasen-loadbalancing, bewaking van DSMR en Node-RED, een harde fail-safe en een Home Assistant-dashboard.
+
+> [!IMPORTANT]
+> Deze software is een aanvullende besturings- en bewakingslaag. Zij vervangt geen correct gedimensioneerde installatie, aardlek- en overstroombeveiliging of andere elektrische beveiligingen.
+
+## Inhoud van de repository
+
+```text
+HomeAssistant/
+├── dashboards/
+│   └── bender_chargepoint.yaml
+└── packages/
+    ├── bender_chargepoint_integration.yaml
+    └── bender_chargepoint_integration_private.yaml.example
+
+NodeRed/
+├── bender_strategy_master.json
+├── bender_strategy_direct.json
+├── bender_strategy_manual.json
+├── bender_strategy_chargepv.json
+└── bender_strategy_dynamic.json
+```
+
+- `bender_chargepoint_integration.yaml` bevat de Modbus-sensoren, helpers, templates, scripts, loadbalancer, watchdogs en herstelautomatisering.
+- `bender_chargepoint.yaml` is een volledig dashboard met de tabbladen **Laadpaal**, **Instellingen** en **Debugging**.
+- De vijf Node-RED-bestanden bevatten de strategiecoördinator en de afzonderlijke laadstrategieën.
+- Het private voorbeeldbestand is bedoeld voor RFID-registerwaarden. Het echte private bestand hoort niet in Git.
+
+## Werking op hoofdlijnen
+
+```text
+DSMR/P1 ──> Home Assistant ──> loadbalancer en gezondheidscontrole
+                    │
+                    ├──> Node-RED ──> gekozen laadstrategie
+                    │                     │
+                    └<── heartbeat ───────┘
+                    │
+                    └──> beveiligde HA-scripts ──> Modbus TCP ──> Bender CC613
+```
+
+Home Assistant is de centrale veiligheidslaag. Node-RED bepaalt de gewenste strategie, maar schrijft niet rechtstreeks naar Modbus. Alle laadopdrachten lopen via Home Assistant-scripts, die de loadbalancer en actieve fail-safe toepassen.
+
+## Laadstrategieën
+
+| Strategie | Gedrag |
+| --- | --- |
+| **Uit** | Schrijft een HEMS-limiet van `0 A`. Dit pauzeert laden; het is geen fysieke vergrendeling van de laadpaal. |
+| **Direct** | Start direct met de ingestelde maximale laadstroom, begrensd op maximaal `16 A` en — indien ingeschakeld — door de loadbalancer. |
+| **Manual** | Behoudt de actuele HEMS-limiet als handmatige instelling. Als deze hoger is dan de beschikbare loadbalancerruimte, wordt hij veilig begrensd. |
+| **ChargePV** | Reageert op `sensor.p1_meter_power`, maximaal eenmaal per 10 seconden. Negatief P1-vermogen geldt als teruglevering. De flow rekent het overschot om naar een driefasen-laadstroom en laadt alleen vanaf minimaal `6 A` én het ingestelde minimale PV-overschot. |
+| **Dynamic** | Leest de vertrekdatum, benodigde kWh, maximale stroom en het `forecast`-attribuut van de Zonneplan-prijssensor. De goedkoopste benodigde uren vóór vertrek worden geselecteerd. Als de uiterste starttijd is bereikt, wordt laden als deadline-fallback gestart. De planning wordt bij activering en vervolgens ieder heel uur opnieuw berekend. |
+
+De instelling `input_number.bender_strategy_max_current` bepaalt de bovengrens voor Direct, ChargePV en Dynamic. De implementatie gaat uit van driefasenladen en een bovengrens van `16 A` per fase.
+
+### Manual na een fail-safe
+
+Een harde fail-safe schrijft de HEMS-limiet naar `0 A`. Voor Manual wordt daarom de eerdere positieve HEMS-limiet opgeslagen. Na herstel:
+
+1. moeten DSMR en Node-RED eerst 30 seconden stabiel gezond zijn;
+2. wordt alleen hersteld als minimaal `6 A` veilig beschikbaar is;
+3. wordt de oude waarde door de actuele loadbalancer begrensd;
+4. volgt zo nodig iedere 10 seconden een nieuwe poging;
+5. stopt de herstelpoging zodra een positieve HEMS-waarde is bevestigd of de gebruiker strategie/fail-safe-modus wijzigt.
+
+Hierdoor kan Manual na een tijdelijke storing veilig hervatten zonder een latere handmatige keuze te overschrijven.
+
+## Loadbalancing
+
+De loadbalancer berekent per fase hoeveel stroom beschikbaar is. Daarvoor combineert hij:
+
+- afname en teruglevering per DSMR-fase;
+- de actuele stroom van de laadpaal per fase;
+- de ingestelde maximale capaciteit van de huisaansluiting;
+- een instelbare veiligheidsmarge;
+- de werkelijke fasespanning, met `230 V` als rekenfallback.
+
+De laagste beschikbare waarde van L1, L2 en L3 is bepalend. De uitkomst wordt op maximaal `16 A` begrensd. Minder dan `6 A` beschikbaar betekent een laadopdracht van `0 A`, omdat een EV normaal niet onder `6 A` kan laden.
+
+De coördinator in Node-RED reageert op wijzigingen van de loadbalancersensor en beperkt deze route tot maximaal één verwerking per 5 seconden. Home Assistant bewaakt daarnaast iedere laadopdracht opnieuw. Uitschakelen van de softwarematige loadbalancer schakelt de elektrische beveiligingen van de installatie vanzelfsprekend niet uit.
+
+## Gezondheidsbewaking en harde fail-safe
+
+### Bewaakte bronnen
+
+Home Assistant controleert iedere 5 seconden:
+
+- **DSMR-gezondheid:** `sensor.dsmr_reading_timestamp` mag niet ouder zijn dan 30 seconden en alle vereiste DSMR/P1-entiteiten moeten numeriek beschikbaar zijn;
+- **Node-RED-gezondheid:** de Master-flow schrijft iedere 10 seconden een heartbeat naar Home Assistant; deze mag niet ouder zijn dan 30 seconden.
+
+De actuele toestand is zichtbaar via onder andere:
+
+- `binary_sensor.bender_dsmr_data_healthy`;
+- `binary_sensor.bender_nodered_heartbeat_healthy`;
+- `binary_sensor.bender_charging_control_healthy`;
+- `sensor.bender_dsmr_data_leeftijd`;
+- `sensor.bender_nodered_heartbeat_age`;
+- `input_text.bender_failsafe_reason`.
+
+### Fail-safe-modi
+
+| Modus | Gedrag |
+| --- | --- |
+| **Uit** | Watchdog grijpt niet in en wist een geobserveerde storingsstatus. Alleen gebruiken voor bewust onderhoud of diagnose. |
+| **Monitoren** | Detecteert en logt storingen, maar verandert de HEMS-limiet niet. Geschikt voor ingebruikname en gepland onderhoud. |
+| **Actief** | Detecteert de storing, blokkeert positieve laadopdrachten en verstuurt asynchroon een pauzeopdracht van `0 A` naar de Bender. Zolang de storing bestaat, wordt een afwijkende positieve HEMS-limiet opnieuw naar `0 A` gestuurd. |
+
+Na herstel start een stabilisatietimer van 30 seconden. Alleen als zowel DSMR als Node-RED gedurende die periode gezond blijven, wordt de fail-safe opgeheven en de actieve strategie opnieuw beoordeeld. Een terugkerende storing onderbreekt de timer.
+
+### Pushberichten
+
+Met `input_boolean.bender_failsafe_notifications_enabled` kunnen meldingen bij ingrijpen en herstel worden aangezet. In het package staat momenteel een installatiegebonden notify-entiteit:
+
+```yaml
+notify.iphone_17_ruald
+```
+
+Vervang deze op beide plaatsen in `bender_chargepoint_integration.yaml` door een notify-entiteit die in jouw Home Assistant bestaat. De fail-safe blijft zonder pushdienst functioneren; alleen de melding kan dan mislukken.
+
+## Vereisten en aannames
+
+- Home Assistant met ondersteuning voor [packages](#1-home-assistant-package-installeren).
+- Node-RED met `node-red-contrib-home-assistant-websocket` en een werkende verbinding naar dezelfde Home Assistant-instantie.
+- Een Bender CC613 die via Modbus TCP bereikbaar is op poort `502`, unit/slave-id `1`.
+- Een driefasenhuisaansluiting en driefasenlaadregeling.
+- Een DSMR/P1-integratie die onderstaande entiteiten actueel houdt.
+- Voor Dynamic: een Zonneplan-prijssensor met een bruikbaar `forecast`-attribuut.
+- Voor de kleuraccenten in het meegeleverde dashboard: HACS-integratie **card-mod**.
+
+### Verplichte DSMR/P1-entiteiten
+
+Deze namen worden letterlijk door de huidige templates en flows gebruikt:
+
+```text
+sensor.dsmr_reading_timestamp
+sensor.dsmr_reading_phase_currently_delivered_l1
+sensor.dsmr_reading_phase_currently_delivered_l2
+sensor.dsmr_reading_phase_currently_delivered_l3
+sensor.dsmr_reading_phase_currently_returned_l1
+sensor.dsmr_reading_phase_currently_returned_l2
+sensor.dsmr_reading_phase_currently_returned_l3
+sensor.dsmr_reading_phase_voltage_l1
+sensor.dsmr_reading_phase_voltage_l2
+sensor.dsmr_reading_phase_voltage_l3
+sensor.p1_meter_power
+```
+
+`sensor.dsmr_reading_timestamp` moet de tijd van het laatste ontvangen P1-telegram bevatten, niet alleen een waarde die verandert wanneer verbruik of teruglevering verandert. Pas de entity-id's in package, dashboard en Node-RED-flows consequent aan als jouw integratie andere namen gebruikt.
+
+### Dynamic-prijssensor
+
+De huidige flow verwacht:
+
+```text
+sensor.zonneplan_current_electricity_tariff
+```
+
+Het attribuut `forecast` moet een lijst met toekomstige uren bevatten. Per item ondersteunt de flow `datetime` of `start_time` en `electricity_price` of `price`. Zonder bruikbare forecast valt de planning terug op de berekende uiterste starttijd.
+
+## Installatie
+
+### 1. Home Assistant-package installeren
+
+Zorg dat packages in `configuration.yaml` zijn ingeschakeld. Voeg dit alleen toe als nog geen `homeassistant:`-sectie bestaat; voeg anders alleen de regel `packages:` aan de bestaande sectie toe.
+
+```yaml
+homeassistant:
+  packages: !include_dir_named packages
+```
+
+Kopieer vervolgens:
+
+```text
+HomeAssistant/packages/bender_chargepoint_integration.yaml
+```
+
+naar de packages-map van Home Assistant.
+
+Controleer vóór ingebruikname in het package:
+
+1. het IP-adres onder `modbus:` — de repository bevat momenteel `192.168.1.194`;
+2. poort `502` en slave-id `1`;
+3. alle DSMR/P1 entity-id's;
+4. de notify-entiteit voor fail-safeberichten;
+5. de maximale huisaansluiting, marge en laadstroom via de helpers in het dashboard;
+6. de RFID-herkenning en scripts als sessiestop via RFID wordt gebruikt.
+
+Voer daarna eerst de Home Assistant-configuratiecontrole uit. Herstart Home Assistant pas als die controle zonder fouten is afgerond.
+
+### 2. Optionele private RFID-scripts
+
+Kopieer:
+
+```text
+bender_chargepoint_integration_private.yaml.example
+```
+
+naar:
+
+```text
+bender_chargepoint_integration_private.yaml
+```
+
+Vul daarin de eigen RFID-registerwaarden in. Het publieke package roept momenteel de scripts `script.bender_rfid_ruald` en `script.bender_rfid_ellen` aan en herkent dezelfde twee namen in `sensor.bender_session_owner`. Zorg dat scriptnamen, herkenning en gebruikersnamen onderling overeenkomen als je ze aanpast.
+
+Het echte private bestand wordt door `.gitignore` uitgesloten. Controleer vóór iedere commit dat RFID-waarden, wachtwoorden, tokens en andere secrets niet zijn toegevoegd.
+
+### 3. Dashboard installeren
+
+1. Installeer **card-mod** via HACS als je de meegeleverde kleuraccenten wilt gebruiken.
+2. Maak in Home Assistant een nieuw dashboard in YAML/raw-modus.
+3. Kopieer de volledige inhoud van `HomeAssistant/dashboards/bender_chargepoint.yaml` naar de raw-configuratie.
+4. Controleer of alle entiteiten beschikbaar zijn.
+
+Het dashboard bevat:
+
+- **Laadpaal:** strategie, status, fail-safe, sessie, vermogen en strategiespecifieke bediening;
+- **Instellingen:** maximale laadstroom, PV-drempel, loadbalancer, huisaansluiting, marge, fail-safe-modus en pushmeldingen;
+- **Debugging:** ruwe Benderwaarden, DSMR/Node-RED-gezondheid, HEMS-logcontext, foutcodes, gebeurtenissen en historie.
+
+### 4. Node-RED-flows importeren
+
+Importeer en deploy alle vijf bestanden uit `NodeRed/`:
+
+1. `bender_strategy_master.json`;
+2. `bender_strategy_direct.json`;
+3. `bender_strategy_manual.json`;
+4. `bender_strategy_chargepv.json`;
+5. `bender_strategy_dynamic.json`.
+
+Let hierbij op het volgende:
+
+- Koppel alle Home Assistant-nodes aan jouw Home Assistant-serverconfiguratie; de export bevat geen overdraagbare inloggegevens.
+- Importeer ook Direct en ChargePV: de Master-flow verwijst via link-nodes naar alle vier strategiespecifieke flows.
+- Deploy de Master-flow zodat de heartbeat iedere 10 seconden wordt bijgewerkt.
+- Los eventuele ontbrekende of dubbele link-nodeverbindingen op voordat je een strategie activeert.
+
+### 5. Eerste ingebruikname
+
+Gebruik voor de eerste controle een moment waarop de auto niet actief laadt.
+
+1. Zet **Fail-safe modus** eerst op `Monitoren`.
+2. Controleer op het tabblad Debugging dat Modbus-sensoren waarden ontvangen.
+3. Controleer dat DSMR en Node-RED beide gezond worden weergegeven.
+4. Stel de capaciteit van de huisaansluiting in. De standaardwaarde `17.250 W` past bij de gebruikte 3 × 25 A-benadering.
+5. Stel een passende loadbalancermarge in; standaard is `1.000 W`.
+6. Schakel de loadbalancer in.
+7. Test `Uit` en daarna met toezicht een lage Manual-instelling.
+8. Test de overige strategieën pas nadat de basisbediening en begrenzing kloppen.
+9. Zet de fail-safe na de gecontroleerde test op `Actief`.
+
+## Gecontroleerd testen van de fail-safe
+
+Test een storing alleen als de auto niet laadt of als een onderbreking aantoonbaar veilig is.
+
+### Node-RED-storing
+
+1. Noteer de HEMS-limiet en actieve strategie.
+2. Onderbreek Node-RED gecontroleerd.
+3. Binnen ongeveer 30 seconden moet de Node-RED-heartbeat ongezond worden.
+4. In modus `Actief` moet de fail-safe actief worden en de HEMS-limiet naar `0 A` gaan.
+5. Als pushberichten zijn ingeschakeld, moet een melding met de reden volgen.
+6. Start Node-RED weer en wacht minimaal 30 seconden stabiele gezondheid.
+7. Controleer de herstelmelding en het opnieuw beoordelen van de strategie.
+
+### DSMR-storing
+
+Gebruik een gecontroleerde onderbreking van de DSMR/P1-aanvoer. De fail-safe moet reageren op een oude `sensor.dsmr_reading_timestamp` of op een ontbrekende vereiste sensor. Controleer na herstel opnieuw de stabilisatietijd en strategie.
+
+> [!WARNING]
+> Gebruik geen tweede rechtstreekse Modbus-client als test terwijl Home Assistant met de Bender verbonden is. Sommige controllers accepteren maar een beperkt aantal gelijktijdige verbindingen; zo'n test kan juist de actieve HA-verbinding verstoren.
+
+Zet bij gepland onderhoud aan Home Assistant, Node-RED of DSMR de fail-safe zo nodig tijdelijk op `Monitoren`. Herstel `Actief` zodra beide gezondheidsindicatoren stabiel zijn.
+
+## Belangrijkste instellingen
+
+| Entiteit | Betekenis | Standaard/bereik |
+| --- | --- | --- |
+| `input_select.bender_charging_strategy` | Actieve laadstrategie | Uit, Direct, Manual, ChargePV, Dynamic |
+| `input_number.bender_strategy_max_current` | Maximale strategie-laadstroom per fase | 6–16 A; standaard 16 A |
+| `input_number.bender_strategy_pv_min_surplus` | Minimaal overschot voor ChargePV | 1.000–11.000 W; standaard 4.140 W |
+| `input_boolean.bender_loadbalancer_enabled` | Softwarematige loadbalancer aan/uit | instelbaar |
+| `input_number.bender_house_max_power` | Totale capaciteit voor de loadbalancerberekening | 5.000–25.000 W; standaard 17.250 W |
+| `input_number.bender_loadbalancer_margin` | Gereserveerde veiligheidsmarge | 0–5.000 W; standaard 1.000 W |
+| `input_select.bender_failsafe_mode` | Gedrag van de watchdog | Monitoren, Uit, Actief |
+| `input_boolean.bender_failsafe_notifications_enabled` | Push bij fail-safe en herstel | instelbaar |
+| `input_datetime.bender_strategy_departure_time` | Vertrekmoment voor Dynamic | door gebruiker |
+| `input_number.bender_strategy_required_kwh` | Gewenste energie voor Dynamic | 0–100 kWh |
+| `input_datetime.bender_manual_stop_time` | Geplande RFID-sessiestop in Manual | door gebruiker |
+
+## Bendergegevens en bediening
+
+Het package leest onder meer:
+
+- chargepoint- en voertuigstatus;
+- veilige stroom en HEMS-limiet;
+- spanning, stroom en vermogen per fase;
+- totaalvermogen en totale energie;
+- sessie-energie en sessieduur;
+- EV State of Charge, indien beschikbaar;
+- actieve RFID-tag/sessie-eigenaar;
+- foutcode en eventregister.
+
+De vertaalde statussen, fouten en gebeurtenissen zijn in het dashboard zichtbaar. Schrijven gebeurt naar de registers voor Safe Current, HEMS-limiet en — optioneel — RFID-simulatie.
+
+## Probleemoplossing
+
+### De HEMS-limiet blijft op 0 A
+
+Controleer achtereenvolgens:
+
+1. `input_boolean.bender_failsafe_active`;
+2. `input_text.bender_failsafe_reason`;
+3. beide gezondheids-binary-sensors;
+4. de beschikbare loadbalancerstroom;
+5. of minstens `6 A` beschikbaar is;
+6. bij Manual: `input_boolean.bender_failsafe_manual_restore_pending`.
+
+Een actieve fail-safe blokkeert iedere positieve opdracht via de meegeleverde scripts. Manual wacht na herstel bewust totdat minimaal `6 A` veilig beschikbaar is.
+
+### DSMR wordt ongezond weergegeven
+
+- Controleer of `sensor.dsmr_reading_timestamp` bij ieder telegram wordt vernieuwd.
+- Controleer of alle elf vereiste DSMR/P1-entiteiten bestaan en numerieke waarden leveren.
+- Controleer een eventuele MQTT-wachtrij of vertraging tussen DSMR Reader en Home Assistant.
+- De actuele leeftijd en lijst met ongeldige entiteiten staan als status/attributen in Home Assistant.
+
+### Node-RED wordt ongezond weergegeven
+
+- Controleer of de Master-flow actief en gedeployed is.
+- Controleer de Home Assistant-serververbinding in Node-RED.
+- Controleer of `input_datetime.bender_nodered_heartbeat` iedere 10 seconden verandert.
+- Controleer of de Master-link-nodes met alle strategyflows verbonden zijn.
+
+### ChargePV start niet
+
+- Teruglevering moet in `sensor.p1_meter_power` negatief zijn.
+- Het absolute overschot moet minimaal de ingestelde PV-drempel bedragen.
+- De berekende stroom moet minimaal `6 A` per fase zijn.
+- De maximale laadstroom, fasespanningen, loadbalancer en fail-safe kunnen de uiteindelijke opdracht verder begrenzen.
+
+### Dynamic plant niet zoals verwacht
+
+- Controleer vertrekdatum en benodigde kWh.
+- Bekijk het `forecast`-attribuut van `sensor.zonneplan_current_electricity_tariff`.
+- Controleer of de forecast toekomstige uuritems met ondersteunde datum- en prijsvelden bevat.
+- De berekening rondt de benodigde laadduur naar boven af op hele uren en gebruikt `3 × 230 V × maximale stroom` als laadvermogen.
+
+### Modbus-sensoren zijn `unavailable`
+
+- Controleer IP-adres, poort, unit-id en netwerkroute.
+- Controleer of een andere Modbus-client de verbinding bezet houdt.
+- Controleer de Home Assistant-logboeken voordat je waarden naar registers schrijft.
+
+## Beveiliging en beheer
+
+- Bewaar RFID-registerwaarden uitsluitend in het genegeerde private package.
+- Exporteer geen Node-RED-credentials, API-tokens of Home Assistant access tokens naar Git.
+- Beveilig de Node-RED-editor en beperk netwerktoegang tot Modbus TCP.
+- Maak vóór wijzigingen een export/back-up van de actieve Home Assistant- en Node-RED-configuratie.
+- Houd lokaal, de actieve server en GitHub aantoonbaar gelijk; vergelijk bestanden inhoudelijk en niet alleen op wijzigingsdatum.
+- Zet wijzigingen gefaseerd live: eerst lokaal valideren, dan gecontroleerd op de server testen en pas daarna naar GitHub pushen.
+
+## Bekende installatiegebonden onderdelen
+
+De repository weerspiegelt de huidige installatie en bevat daarom waarden die bij hergebruik aangepast moeten worden:
+
+- Bender-IP-adres `192.168.1.194`;
+- notify-entiteit `notify.iphone_17_ruald`;
+- RFID-gebruikers, tagherkenning en private scriptnamen;
+- DSMR/P1 entity-id's;
+- Zonneplan-prijssensor;
+- aannames van driefasenladen, maximaal `16 A` en minimaal `6 A`.
+
+Controleer deze punten opnieuw na het wijzigen van integraties, entity-id's, de netaansluiting of de laadpaalconfiguratie.
 
 ---
 
-## 📖 Functionele Beschrijving
-
-Dit project zorgt ervoor dat je jouw elektrische auto slim kunt opladen via een gebruiksvriendelijk dashboard in Home Assistant. Het systeem regelt automatisch de laadsnelheid op basis van jouw voorkeuren en beschermt tegelijkertijd je huisaansluiting.
-
-### 🔋 Laadstrategieën
-Je kunt op elk moment kiezen uit 5 standen:
-
-1.  **Uit**: De laadpaal is vergrendeld. Er kan niet geladen worden.
-2.  **Direct**: De auto begint meteen te laden op maximale snelheid (standaard 16A, tenzij begrensd door de Load Balancer). Handig als je haast hebt.
-3.  **Manual**: Handbediening. Jij bepaalt zelf via het dashboard de laadstroom (6A, 10A of 16A).
-4.  **ChargePV (Zonneladen)**: Het systeem kijkt naar je slimme meter (P1).
-    *   Is er stroom over? Dan gaat dat naar de auto.
-    *   Gaat de zon harder schijnen? De auto laadt sneller.
-    *   Komt er een wolk? De auto laadt langzamer of pauzeert.
-    *   *Doel:* 100% gratis rijden op zonne-energie.
-5.  **Dynamic (Slim Laden)**:
-    *   Jij geeft aan hoe laat je weg moet en hoeveel energie je nodig hebt.
-    *   Het systeem berekent wanneer de stroom het goedkoopst is (op basis van dynamische tarieven).
-    *   De auto laadt precies genoeg op de goedkoopste momenten om klaar te zijn voor vertrek.
-
-### ⚖️ Load Balancer (Actieve Beveiliging)
-Dit systeem beschermt je meterkast (zekeringen) tegen overbelasting. Dit is vooral kritiek als je een warmtepomp, inductieplaat of wasdroger samen met de auto gebruikt.
-
-*   **Per Fase Bescherming:** Het systeem meet continu (elke 10 seconden) het verbruik op Fase 1, 2 en 3 van je huis via de slimme meter.
-*   **Berekening:** `Beschikbaar = Zekering (25A) - Veiligheidsmarge - Huidig Huisverbruik`.
-*   **Ingrijpen:**
-    *   De laadpaal past zich automatisch aan naar de fase waar de *minste* ruimte is.
-    *   Als de beschikbare ruimte onder de **6 Ampère** zakt, stopt het laden tijdelijk (Pauze). Dit is een harde veiligheidsgrens voor elektrische auto's.
-    *   Zodra er weer ruimte is, start het laden vanzelf weer.
-
-### 📱 Het Dashboard
-Het dashboard is ingericht in drie tabbladen:
-1.  **Laadpaal:** Voor dagelijks gebruik. Strategie kiezen, live status en verbruik zien.
-2.  **Instellingen:** Voor configuratie. Hier stel je o.a. de Load Balancer marge in en de capaciteit van je huisaansluiting.
-3.  **Debugging:** Voor probleemoplossing. Toont actieve foutmeldingen, historische events en raw Modbus data.
-
-### 🔍 Uitgebreide Monitoring
-Het systeem biedt gedetailleerde informatie over je laadsessie:
-*   **Voertuig Status (Control Pilot):** Toont de IEC 61851-1 state (A t/m E) - van "niet aangesloten" tot "laden actief".
-*   **EV Batterij SOC:** State of Charge van je auto (indien ondersteund door het voertuig).
-*   **Sessie Energie & Duur:** Hoeveel kWh er geladen is en hoe lang de huidige/laatste sessie duurt.
-*   **Foutmeldingen:** Automatische vertaling van Bender error codes naar leesbare Nederlandse meldingen.
-*   **Event Log:** Historische events zoals reboots, autorisatiepogingen en firmware updates.
-
----
-
-## 🛠️ Technische Installatie Handleiding
-
-### Benodigdheden
-*   **Home Assistant** (met `packages` ondersteuning ingeschakeld in `configuration.yaml`).
-*   **Node-RED** (als addon binnen HA of los).
-*   **Slimme Meter Integratie** in HA (bijv. DSMR of P1 Monitor) met sensoren voor voltage en stroom per fase.
-*   **Bender CC613** controller verbonden via Modbus TCP.
-
-### Stap 1: Home Assistant Package Installeren
-1.  Kopieer het bestand `HomeAssistant/packages/bender_chargepoint_integration.yaml` naar de `packages/` map van je Home Assistant installatie.
-2.  Open het bestand en controleer de **Modbus IP** instellingen bovenaan (regel 4):
-    ```yaml
-    modbus:
-      - name: modbus_hub
-        type: tcp
-        host: 192.168.x.x  # <-- PAS DIT AAN NAAR HET IP VAN JOUW BENDER
-        port: 502
-    ```
-3.  Controleer of de **DSMR sensoren** in het bestand overeenkomen met de namen van jouw slimme meter entiteiten:
-    *   Per-fase sensoren: `sensor.dsmr_reading_phase_currently_delivered_l1` (en L2, L3)
-    *   Totaal vermogen: `sensor.p1_meter_power` (voor ChargePV strategie)
-4.  Herstart Home Assistant.
-
-### Stap 2: Dashboard Configureren
-1.  Maak een nieuw dashboard aan in Home Assistant of voeg een nieuwe view toe aan je bestaande dashboard.
-2.  Installeer de HACS frontend integratie **Card-mod** (nodig voor de gekleurde knoppen).
-3.  Kopieer de inhoud van `HomeAssistant/dashboards/bender_chargepoint.yaml`.
-4.  Plak dit in de Raw Configuration Editor van je dashboard.
-
-### Stap 3: Node-RED Flows Importeren
-De logica van de strategieën draait in Node-RED.
-
-1.  Open Node-RED.
-2.  Importeer de volgende 5 JSON bestanden uit de `NodeRed/` map in deze volgorde:
-    *   `bender_strategy_master.json` (De coördinator).
-    *   `bender_strategy_manual.json`
-    *   `bender_strategy_direct.json`
-    *   `bender_strategy_chargepv.json`
-    *   `bender_strategy_dynamic.json`
-3.  Controleer de **Home Assistant Server** node in elke flow. Zorg dat deze verbonden is met jouw HA instantie.
-4.  Klik op **Deploy**.
-
-### Stap 4: Eerste Ingebruikname
-1.  Ga naar het **Instellingen** tabblad op je nieuwe dashboard.
-2.  Zet de **Load Balancer** op "Actief" (Aan).
-3.  Stel de **Huisaansluiting Capaciteit** in (standaard 17250W voor 3x25A).
-4.  Stel een **Veiligheidsmarge** in (bijv. 1000W).
-5.  Ga naar het **Laadpaal** tabblad en test de strategie "Manual" om te kijken of de communicatie met de Bender werkt.
-
----
-*Laatst bijgewerkt: Februari 2026*
+Laatst inhoudelijk gecontroleerd tegen de Home Assistant-package-, dashboard- en Node-RED-code: **september 2026**.
