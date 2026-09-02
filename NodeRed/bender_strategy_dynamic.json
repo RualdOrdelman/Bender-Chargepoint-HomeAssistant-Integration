@@ -506,7 +506,7 @@
         "z": "bender_strategy_dynamic_tab",
         "g": "bender_dynamic_group",
         "name": "Dynamic log",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": true,

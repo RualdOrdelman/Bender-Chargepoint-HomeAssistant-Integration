@@ -183,9 +183,26 @@ views:
               - type: entities
                 title: "🔌 Status"
                 entities:
+                  - entity: input_select.bender_failsafe_mode
+                    name: Fail-safe modus
+                    icon: mdi:shield-half-full
                   - entity: input_text.bender_strategy_active_status
                     name: Strategie Status
                     icon: mdi:information
+                  - entity: binary_sensor.bender_charging_control_healthy
+                    name: Veilige besturing
+                    icon: mdi:shield-check
+                    card_mod:
+                      style: |
+                        :host {
+                          --card-mod-icon-color:
+                            {% if is_state(config.entity, 'on') %} #4caf50
+                            {% else %} #f44336
+                            {% endif %};
+                        }
+                  - entity: input_text.bender_failsafe_reason
+                    name: Fail-safe reden
+                    icon: mdi:shield-alert
                   - entity: binary_sensor.bender_charging_active
                     name: Actief aan het laden
                     icon: mdi:ev-station
@@ -466,6 +483,15 @@ views:
                       entity: input_number.bender_loadbalancer_margin
                   - type: section
                     label: "Status"
+                  - entity: input_select.bender_failsafe_mode
+                    name: Fail-safe Modus
+                    icon: mdi:shield-half-full
+                  - entity: input_boolean.bender_failsafe_observed
+                    name: Watchdog Storing Gedetecteerd
+                    icon: mdi:shield-alert-outline
+                  - entity: input_boolean.bender_failsafe_notifications_enabled
+                    name: Pushmeldingen Ingeschakeld
+                    icon: mdi:bell-alert
                   - entity: sensor.bender_loadbalancer_available_current
                     name: LB Limiet (Bottleneck)
                     icon: mdi:current-ac
@@ -487,6 +513,15 @@ views:
                     name: Beschikbaar L3
                   - type: section
                     label: "Data Actualiteit"
+                  - entity: binary_sensor.bender_dsmr_data_healthy
+                    name: DSMR Data Gezond
+                    icon: mdi:meter-electric-outline
+                  - entity: binary_sensor.bender_nodered_heartbeat_healthy
+                    name: NodeRed Verbinding Gezond
+                    icon: mdi:lan-connect
+                  - entity: sensor.bender_nodered_heartbeat_age
+                    name: NodeRed Heartbeat Leeftijd
+                    icon: mdi:heart-pulse
                   - entity: sensor.bender_dsmr_data_leeftijd
                     name: DSMR Data Leeftijd
                     icon: mdi:clock-alert
@@ -707,6 +742,18 @@ views:
                             {% else %} #4caf50
                             {% endif %};
                         }
+                  - entity: binary_sensor.bender_charging_control_healthy
+                    name: Besturing Gezond
+                    icon: mdi:shield-check
+                  - entity: input_text.bender_failsafe_reason
+                    name: Fail-safe Reden
+                    icon: mdi:shield-alert
+                  - entity: sensor.bender_nodered_heartbeat_age
+                    name: NodeRed Heartbeat Leeftijd
+                    icon: mdi:heart-pulse
+                  - entity: timer.bender_failsafe_recovery
+                    name: Herstelcontrole
+                    icon: mdi:timer-sand
 
           # ==================== KOLOM 4: HEMS LIMIET LOG ====================
           - type: vertical-stack

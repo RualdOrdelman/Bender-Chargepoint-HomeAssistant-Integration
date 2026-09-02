@@ -210,7 +210,7 @@
         "z": "bender_strategy_manual_tab",
         "g": "bender_manual_group",
         "name": "Manual LB check",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": true,

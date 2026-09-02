@@ -18,10 +18,10 @@
             "bender_direct_start_link",
             "bender_direct_start"
         ],
-        "x": 14,
-        "y": 19,
-        "w": 372,
-        "h": 122
+        "x": 24,
+        "y": 39,
+        "w": 342,
+        "h": 82
     },
     {
         "id": "bender_direct_start_link",

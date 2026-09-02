@@ -185,6 +185,17 @@ input_number:
     icon: mdi:current-ac
     mode: slider
 
+  # Persistent snapshot used to restore Manual after a hard fail-safe.
+  # No initial value: Home Assistant restores the last stored value.
+  bender_failsafe_previous_hems:
+    name: HEMS-limiet voor fail-safe
+    min: 0
+    max: 32
+    step: 1
+    unit_of_measurement: "A"
+    icon: mdi:history
+    mode: box
+
   bender_strategy_pv_min_surplus:
     name: Min. overschot voor laden
     min: 1000
@@ -231,6 +242,14 @@ input_select:
       - Dynamic
     icon: mdi:ev-station
 
+  bender_failsafe_mode:
+    name: Laadpaal fail-safe modus
+    options:
+      - Monitoren
+      - Uit
+      - Actief
+    icon: mdi:shield-half-full
+
 ###########################################################################################################
 # INPUT DATETIME
 ###########################################################################################################
@@ -253,6 +272,12 @@ input_datetime:
     has_time: true
     icon: mdi:clock-stop
 
+  bender_nodered_heartbeat:
+    name: Laatste NodeRed heartbeat
+    has_date: true
+    has_time: true
+    icon: mdi:heart-pulse
+
 ###########################################################################################################
 # INPUT TEXT
 ###########################################################################################################
@@ -265,6 +290,11 @@ input_text:
   bender_hems_change_context:
     name: "Laatste HEMS wijziging context"
     icon: mdi:text-box-search
+    max: 255
+
+  bender_failsafe_reason:
+    name: "Laadpaal fail-safe reden"
+    icon: mdi:shield-alert
     max: 255
 
 ###########################################################################################################
@@ -282,6 +312,33 @@ input_boolean:
   bender_manual_stop_scheduled:
     name: Sessie stop gepland
     icon: mdi:calendar-clock
+
+  bender_failsafe_active:
+    name: Laadpaal fail-safe actief
+    icon: mdi:shield-lock
+    initial: false
+
+  bender_failsafe_observed:
+    name: Laadpaal watchdog storing gedetecteerd
+    icon: mdi:shield-alert-outline
+    initial: false
+
+  bender_failsafe_notifications_enabled:
+    name: Laadpaal fail-safe pushmeldingen
+    icon: mdi:bell-alert
+
+  bender_failsafe_manual_restore_pending:
+    name: Manual herstel wacht op laadruimte
+    icon: mdi:restart-alert
+
+###########################################################################################################
+# TIMER
+###########################################################################################################
+timer:
+  bender_failsafe_recovery:
+    name: Laadpaal fail-safe herstelcontrole
+    duration: "00:00:30"
+    restore: false
 
 ###########################################################################################################
 # TEMPLATE SENSORS
@@ -508,7 +565,10 @@ template:
         unit_of_measurement: "A"
         device_class: current
         state: >
-          {% if is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
+          {% if is_state('input_select.bender_failsafe_mode', 'Actief')
+                and not is_state('binary_sensor.bender_dsmr_data_healthy', 'on') %}
+            0.0
+          {% elif is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
             {# --- Configuration --- #}
             {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
             {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
@@ -606,33 +666,26 @@ template:
             16.0
           {% endif %}
 
-      # DSMR Data Freshness - Shows how old the P1 meter data is
+      # DSMR Data Freshness - based on the timestamp of the latest P1 telegram.
+      # Power values may legitimately stay unchanged at 0 for a long time, so
+      # their last_updated value is not a reliable connection watchdog.
       - name: "Bender DSMR Data Leeftijd"
         unique_id: "bender_dsmr_data_leeftijd"
         unit_of_measurement: "s"
         icon: mdi:clock-alert
         state: >
-          {% set last = states.sensor.dsmr_reading_phase_currently_delivered_l1.last_updated %}
-          {% if last is defined and last is not none %}
-            {{ (now() - last).total_seconds() | round(0) }}
+          {% set telegram = as_timestamp(states('sensor.dsmr_reading_timestamp'), 0) %}
+          {% if telegram > 0 %}
+            {{ [as_timestamp(now()) - telegram, 0] | max | round(0) }}
           {% else %}
-            unknown
+            999999
           {% endif %}
         attributes:
           last_update: >
-            {% set last = states.sensor.dsmr_reading_phase_currently_delivered_l1.last_updated %}
-            {% if last is defined and last is not none %}
-              {{ last.strftime('%H:%M:%S') }}
-            {% else %}
-              unknown
-            {% endif %}
+            {{ states('sensor.dsmr_reading_timestamp') }}
           stale: >
-            {% set last = states.sensor.dsmr_reading_phase_currently_delivered_l1.last_updated %}
-            {% if last is defined and last is not none %}
-              {{ (now() - last).total_seconds() > 30 }}
-            {% else %}
-              true
-            {% endif %}
+            {% set telegram = as_timestamp(states('sensor.dsmr_reading_timestamp'), 0) %}
+            {{ telegram <= 0 or (as_timestamp(now()) - telegram) > 30 }}
 
       # Total Power available for Charger (Visual Only)
       # Based on the bottleneck current * 3 phases * 230V
@@ -721,6 +774,111 @@ template:
         state: >
           {{ states('sensor.bender_totalpower') | float(0) > 0 }}
 
+  # Fail-safe health sensors are refreshed every 5 seconds. They are deliberately
+  # independent of NodeRed so Home Assistant can stop charging if NodeRed is down.
+  - triggers:
+      - trigger: time_pattern
+        seconds: "/5"
+      - trigger: homeassistant
+        event: start
+    sensor:
+      - name: "Bender NodeRed Heartbeat Age"
+        unique_id: "bender_nodered_heartbeat_age"
+        unit_of_measurement: "s"
+        device_class: duration
+        state_class: measurement
+        icon: mdi:heart-pulse
+        state: >
+          {% set heartbeat = as_timestamp(states('input_datetime.bender_nodered_heartbeat'), 0) %}
+          {% if heartbeat > 0 %}
+            {{ [as_timestamp(now()) - heartbeat, 0] | max | round(0) }}
+          {% else %}
+            999999
+          {% endif %}
+
+    binary_sensor:
+      - name: "Bender DSMR Data Healthy"
+        unique_id: "bender_dsmr_data_healthy"
+        icon: mdi:meter-electric-outline
+        state: >
+          {% set required = [
+            'sensor.dsmr_reading_phase_currently_delivered_l1',
+            'sensor.dsmr_reading_phase_currently_delivered_l2',
+            'sensor.dsmr_reading_phase_currently_delivered_l3',
+            'sensor.dsmr_reading_phase_currently_returned_l1',
+            'sensor.dsmr_reading_phase_currently_returned_l2',
+            'sensor.dsmr_reading_phase_currently_returned_l3',
+            'sensor.dsmr_reading_phase_voltage_l1',
+            'sensor.dsmr_reading_phase_voltage_l2',
+            'sensor.dsmr_reading_phase_voltage_l3',
+            'sensor.p1_meter_power'
+          ] %}
+          {% set entities = expand(required) %}
+          {% set telegram = as_timestamp(states('sensor.dsmr_reading_timestamp'), 0) %}
+          {% set telegram_age = as_timestamp(now()) - telegram if telegram > 0 else 999999 %}
+          {% set ns = namespace(healthy=(
+            (entities | count) == (required | count)
+            and telegram_age <= 30
+          )) %}
+          {% for entity in entities %}
+            {% if entity.state in ['unknown', 'unavailable', 'none', '']
+                  or not is_number(entity.state) %}
+              {% set ns.healthy = false %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.healthy }}
+        attributes:
+          invalid_entities: >
+            {% set required = [
+              'sensor.dsmr_reading_phase_currently_delivered_l1',
+              'sensor.dsmr_reading_phase_currently_delivered_l2',
+              'sensor.dsmr_reading_phase_currently_delivered_l3',
+              'sensor.dsmr_reading_phase_currently_returned_l1',
+              'sensor.dsmr_reading_phase_currently_returned_l2',
+              'sensor.dsmr_reading_phase_currently_returned_l3',
+              'sensor.dsmr_reading_phase_voltage_l1',
+              'sensor.dsmr_reading_phase_voltage_l2',
+              'sensor.dsmr_reading_phase_voltage_l3',
+              'sensor.p1_meter_power'
+            ] %}
+            {% set entities = expand(required) %}
+            {% set found = entities | map(attribute='entity_id') | list %}
+            {% set ns = namespace(invalid=[]) %}
+            {% set telegram = as_timestamp(states('sensor.dsmr_reading_timestamp'), 0) %}
+            {% set telegram_age = as_timestamp(now()) - telegram if telegram > 0 else 999999 %}
+            {% if telegram <= 0 %}
+              {% set ns.invalid = ns.invalid + ['sensor.dsmr_reading_timestamp ontbreekt of is ongeldig'] %}
+            {% elif telegram_age > 30 %}
+              {% set ns.invalid = ns.invalid + ['DSMR-telegram ' ~ (telegram_age | round(0) | int) ~ 's oud'] %}
+            {% endif %}
+            {% for entity_id in required %}
+              {% if entity_id not in found %}
+                {% set ns.invalid = ns.invalid + [entity_id ~ ' ontbreekt'] %}
+              {% endif %}
+            {% endfor %}
+            {% for entity in entities %}
+              {% if entity.state in ['unknown', 'unavailable', 'none', ''] %}
+                {% set ns.invalid = ns.invalid + [entity.entity_id ~ '=' ~ entity.state] %}
+              {% elif not is_number(entity.state) %}
+                {% set ns.invalid = ns.invalid + [entity.entity_id ~ ' is niet numeriek: ' ~ entity.state] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.invalid | join(', ') }}
+
+      - name: "Bender NodeRed Heartbeat Healthy"
+        unique_id: "bender_nodered_heartbeat_healthy"
+        icon: mdi:lan-connect
+        state: >
+          {{ states('sensor.bender_nodered_heartbeat_age') | float(999999) <= 30 }}
+
+      - name: "Bender Charging Control Healthy"
+        unique_id: "bender_charging_control_healthy"
+        icon: mdi:shield-check
+        state: >
+          {{ is_state('binary_sensor.bender_dsmr_data_healthy', 'on')
+             and is_state('binary_sensor.bender_nodered_heartbeat_healthy', 'on')
+             and is_state('input_boolean.bender_failsafe_active', 'off') }}
+
 ###########################################################################################################
 # SCRIPTS
 ###########################################################################################################
@@ -738,17 +896,25 @@ script:
   set_bender_hems_limit:
     alias: "Set Bender HEMS Limit"
     icon: mdi:home-lightning-bolt
+    mode: single
+    max_exceeded: silent
     fields:
       current:
         description: "HEMS Limit in Ampère (0-32A)"
         example: "16"
     sequence:
+      - variables:
+          requested_current: "{{ [[current | int(0), 0] | max, 32] | min }}"
+          failsafe_active: "{{ is_state('input_boolean.bender_failsafe_active', 'on') }}"
+          applied_current: >
+            {{ 0 if failsafe_active and requested_current | int(0) > 0 else requested_current | int(0) }}
+
       - service: modbus.write_register
         data:
           hub: modbus_hub
           slave: 1
           address: 1000
-          value: "{{ current | int }}"
+          value: "{{ applied_current }}"
 
       # ---- Logging: leg vast waarom de limiet op dit moment werd ingesteld ----
       - variables:
@@ -766,12 +932,14 @@ script:
           _strat:  "{{ states('input_select.bender_charging_strategy') }}"
           _max:    "{{ states('input_number.bender_house_max_power') | float(0) | round(0) | int }}"
           _margin: "{{ states('input_number.bender_loadbalancer_margin') | float(0) | round(0) | int }}"
+          _blocked: "{{ requested_current | int(0) != applied_current | int(0) }}"
 
       - service: logbook.log
         data:
           name: "HEMS Limiet Ingesteld"
           message: >
-            → {{ current }}A | LB: {{ _lb }}A (L1:{{ _lb_l1 }} L2:{{ _lb_l2 }} L3:{{ _lb_l3 }}) |
+            → {{ applied_current }}A{% if _blocked %} ({{ requested_current }}A geblokkeerd door fail-safe){% endif %} |
+            LB: {{ _lb }}A (L1:{{ _lb_l1 }} L2:{{ _lb_l2 }} L3:{{ _lb_l3 }}) |
             Grid L1:{{ _g_l1 }}W L2:{{ _g_l2 }}W L3:{{ _g_l3 }}W |
             Laadpaal L1:{{ _ch_l1 }}A L2:{{ _ch_l2 }}A L3:{{ _ch_l3 }}A |
             DSMR:{{ _dsmr }}s | Max:{{ _max }}W Marge:{{ _margin }}W | {{ _strat }}
@@ -782,7 +950,7 @@ script:
           entity_id: input_text.bender_hems_change_context
         data:
           value: >
-            {{ now().strftime('%H:%M:%S') }} →{{ current }}A LB:{{ _lb }}A ({{ _lb_l1 }}/{{ _lb_l2 }}/{{ _lb_l3 }}) Grid:{{ _g_l1 }}/{{ _g_l2 }}/{{ _g_l3 }}W Ch:{{ _ch_l1 }}/{{ _ch_l2 }}/{{ _ch_l3 }}A DSMR:{{ _dsmr }}s
+            {{ now().strftime('%H:%M:%S') }} →{{ applied_current }}A{% if _blocked %} FAILSAFE({{ requested_current }}A geblokkeerd){% endif %} LB:{{ _lb }}A ({{ _lb_l1 }}/{{ _lb_l2 }}/{{ _lb_l3 }}) Grid:{{ _g_l1 }}/{{ _g_l2 }}/{{ _g_l3 }}W Ch:{{ _ch_l1 }}/{{ _ch_l2 }}/{{ _ch_l3 }}A DSMR:{{ _dsmr }}s
 
   bender_start_charging:
     alias: "Bender Start Laden (Max)"
@@ -813,7 +981,12 @@ script:
         target:
           entity_id: input_text.bender_strategy_active_status
         data:
-          value: "Laden op {{ final_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})"
+          value: >
+            {% if is_state('input_boolean.bender_failsafe_active', 'on') %}
+              Fail-safe actief: {{ states('input_text.bender_failsafe_reason') }}
+            {% else %}
+              Laden op {{ final_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})
+            {% endif %}
 
   bender_stop_charging:
     alias: "Bender Stop Laden"
@@ -826,7 +999,12 @@ script:
         target:
           entity_id: input_text.bender_strategy_active_status
         data:
-          value: "Laden gestopt"
+          value: >
+            {% if is_state('input_boolean.bender_failsafe_active', 'on') %}
+              Fail-safe actief: {{ states('input_text.bender_failsafe_reason') }}
+            {% else %}
+              Laden gestopt
+            {% endif %}
 
   bender_set_charging_current:
     alias: "Bender Stel Laadstroom In"
@@ -865,7 +1043,12 @@ script:
                 target:
                   entity_id: input_text.bender_strategy_active_status
                 data:
-                  value: "Laden op {{ safe_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})"
+                  value: >
+                    {% if is_state('input_boolean.bender_failsafe_active', 'on') %}
+                      Fail-safe actief: {{ states('input_text.bender_failsafe_reason') }}
+                    {% else %}
+                      Laden op {{ safe_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})
+                    {% endif %}
         default:
           - service: script.bender_stop_charging
 
@@ -911,6 +1094,385 @@ script:
 # AUTOMATIONS
 ###########################################################################################################
 automation:
+
+  # Hard fail-safe watchdog. In Monitoren it only records what it sees. Only
+  # mode Actief may set the HEMS limit to 0A and block NodeRed strategies.
+  - alias: "Bender Hard Fail-safe Watchdog"
+    id: "bender_hard_failsafe_watchdog"
+    description: "Bewaakt DSMR en NodeRed; grijpt alleen in wanneer de fail-safe modus Actief is"
+    mode: single
+    trigger:
+      - platform: time_pattern
+        seconds: "/5"
+      - platform: homeassistant
+        event: start
+    variables:
+      dsmr_healthy: "{{ is_state('binary_sensor.bender_dsmr_data_healthy', 'on') }}"
+      nodered_healthy: "{{ is_state('binary_sensor.bender_nodered_heartbeat_healthy', 'on') }}"
+      failsafe_mode: "{{ states('input_select.bender_failsafe_mode') }}"
+      failsafe_was_active: "{{ is_state('input_boolean.bender_failsafe_active', 'on') }}"
+      fault_was_observed: "{{ is_state('input_boolean.bender_failsafe_observed', 'on') }}"
+      notifications_enabled: "{{ is_state('input_boolean.bender_failsafe_notifications_enabled', 'on') }}"
+      failure_reason: >
+        {% if not dsmr_healthy %}
+          {% set invalid = state_attr('binary_sensor.bender_dsmr_data_healthy', 'invalid_entities') | default('', true) %}
+          DSMR-data ontbreekt of is ouder dan 30s{% if invalid %}: {{ invalid[:170] }}{% endif %}
+        {% elif not nodered_healthy %}
+          NodeRed-heartbeat is {{ states('sensor.bender_nodered_heartbeat_age') | int(999999) }}s oud
+        {% else %}
+          Onbekende besturingsfout
+        {% endif %}
+    action:
+      # Leaving mode Actief immediately removes the enforcement latch. This
+      # never writes a new current; NodeRed may then re-evaluate its strategy.
+      - if:
+          - condition: template
+            value_template: "{{ failsafe_mode != 'Actief' and failsafe_was_active }}"
+        then:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.bender_failsafe_active
+          - service: logbook.log
+            data:
+              name: "Laadpaal Hard Fail-safe"
+              message: "Ingrijpen uitgeschakeld; modus is {{ failsafe_mode }}"
+              entity_id: input_boolean.bender_failsafe_active
+
+      - if:
+          - condition: template
+            value_template: >
+              {{ failsafe_mode != 'Actief'
+                 and is_state('input_boolean.bender_failsafe_manual_restore_pending', 'on') }}
+        then:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.bender_failsafe_manual_restore_pending
+
+      - choose:
+          # Mode Uit clears monitoring state and performs no watchdog action.
+          - conditions:
+              - condition: template
+                value_template: "{{ failsafe_mode == 'Uit' }}"
+            sequence:
+              - if:
+                  - condition: state
+                    entity_id: timer.bender_failsafe_recovery
+                    state: "active"
+                then:
+                  - service: timer.cancel
+                    target:
+                      entity_id: timer.bender_failsafe_recovery
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.bender_failsafe_observed
+                    state: "on"
+                then:
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: input_boolean.bender_failsafe_observed
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.bender_failsafe_manual_restore_pending
+                    state: "on"
+                then:
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: input_boolean.bender_failsafe_manual_restore_pending
+
+          - conditions:
+              - condition: template
+                value_template: "{{ not dsmr_healthy or not nodered_healthy }}"
+            sequence:
+              - if:
+                  - condition: state
+                    entity_id: timer.bender_failsafe_recovery
+                    state: "active"
+                then:
+                  - service: timer.cancel
+                    target:
+                      entity_id: timer.bender_failsafe_recovery
+
+              # Latch the detected fault once in both Monitoren and Actief.
+              - if:
+                  - condition: template
+                    value_template: "{{ not fault_was_observed }}"
+                then:
+                  - service: input_text.set_value
+                    target:
+                      entity_id: input_text.bender_failsafe_reason
+                    data:
+                      value: "{{ failure_reason }}"
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: input_boolean.bender_failsafe_observed
+                  - service: logbook.log
+                    data:
+                      name: "Laadpaal Fail-safe Monitor"
+                      message: >
+                        Storing gedetecteerd in modus {{ failsafe_mode }}: {{ failure_reason }}
+                      entity_id: input_boolean.bender_failsafe_observed
+
+              # Enforcement is deliberately impossible in Uit or Monitoren.
+              - if:
+                  - condition: template
+                    value_template: "{{ failsafe_mode == 'Actief' and not failsafe_was_active }}"
+                then:
+                  - variables:
+                      previous_hems: "{{ states('sensor.bender_hems_limit') | int(0) }}"
+                      strategy: "{{ states('input_select.bender_charging_strategy') }}"
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: input_boolean.bender_failsafe_manual_restore_pending
+                  - action: input_number.set_value
+                    target:
+                      entity_id: input_number.bender_failsafe_previous_hems
+                    data:
+                      value: "{{ previous_hems }}"
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: input_boolean.bender_failsafe_active
+                  # Start the Modbus write without waiting for it. A broken
+                  # Modbus connection must never block the watchdog or push.
+                  - action: script.turn_on
+                    target:
+                      entity_id: script.set_bender_hems_limit
+                    data:
+                      variables:
+                        current: 0
+                  - service: input_text.set_value
+                    target:
+                      entity_id: input_text.bender_strategy_active_status
+                    data:
+                      value: "Fail-safe actief: {{ failure_reason }}"
+                  - if:
+                      - condition: template
+                        value_template: "{{ notifications_enabled }}"
+                    then:
+                      - action: notify.send_message
+                        target:
+                          entity_id: notify.iphone_17_ruald
+                        data:
+                          message: >
+                            ⚠️ Laadpaal fail-safe actief. Pauzeeropdracht 0A is verstuurd.
+                            Reden: {{ failure_reason }}. Strategie: {{ strategy }}.
+                            Vorige HEMS-limit: {{ previous_hems }}A.
+                  - service: logbook.log
+                    data:
+                      name: "Laadpaal Hard Fail-safe"
+                      message: >
+                        Geactiveerd: {{ failure_reason }} | Strategie: {{ strategy }} |
+                        Vorige HEMS: {{ previous_hems }}A → 0A
+                      entity_id: input_boolean.bender_failsafe_active
+
+              # Re-assert 0A if a write outside the guarded HA scripts changed HEMS.
+              - if:
+                  - condition: template
+                    value_template: >
+                      {{ failsafe_mode == 'Actief'
+                         and failsafe_was_active
+                         and states('sensor.bender_hems_limit') not in ['unknown', 'unavailable']
+                         and states('sensor.bender_hems_limit') | int(0) != 0 }}
+                then:
+                  - action: script.turn_on
+                    target:
+                      entity_id: script.set_bender_hems_limit
+                    data:
+                      variables:
+                        current: 0
+
+        default:
+          - if:
+              - condition: state
+                entity_id: input_boolean.bender_failsafe_observed
+                state: "on"
+              - condition: state
+                entity_id: timer.bender_failsafe_recovery
+                state: "idle"
+            then:
+              - service: timer.start
+                target:
+                  entity_id: timer.bender_failsafe_recovery
+                data:
+                  duration: "00:00:30"
+
+  - alias: "Bender Hard Fail-safe Hersteld"
+    id: "bender_hard_failsafe_recovered"
+    description: "Hervat de strategie pas na 30 seconden gezonde DSMR-data en NodeRed-heartbeat"
+    mode: single
+    trigger:
+      - platform: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.bender_failsafe_recovery
+    condition:
+      - condition: state
+        entity_id: input_boolean.bender_failsafe_observed
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.bender_dsmr_data_healthy
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.bender_nodered_heartbeat_healthy
+        state: "on"
+    action:
+      - variables:
+          strategy: "{{ states('input_select.bender_charging_strategy') }}"
+          lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(0) | round(1) }}"
+          was_enforced: "{{ is_state('input_boolean.bender_failsafe_active', 'on') }}"
+          notifications_enabled: "{{ is_state('input_boolean.bender_failsafe_notifications_enabled', 'on') }}"
+          previous_hems: "{{ states('input_number.bender_failsafe_previous_hems') | int(0) }}"
+      - service: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.bender_failsafe_active
+            - input_boolean.bender_failsafe_observed
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.bender_failsafe_reason
+        data:
+          value: "Geen storing - DSMR en NodeRed zijn 30s stabiel"
+      - if:
+          - condition: template
+            value_template: "{{ was_enforced }}"
+        then:
+          - service: input_text.set_value
+            target:
+              entity_id: input_text.bender_strategy_active_status
+            data:
+              value: "Fail-safe hersteld; strategie {{ strategy }} wordt opnieuw beoordeeld"
+          - if:
+              - condition: template
+                value_template: "{{ notifications_enabled }}"
+            then:
+              - action: notify.send_message
+                target:
+                  entity_id: notify.iphone_17_ruald
+                data:
+                  message: >
+                    ✅ Laadpaal fail-safe opgeheven. DSMR en NodeRed zijn 30 seconden stabiel.
+                    Strategie {{ strategy }} wordt opnieuw beoordeeld met {{ lb_limit }}A beschikbaar.
+          # Manual has no independent setpoint: it normally reads the current
+          # HEMS value, which is 0A after a fail-safe. Arm a separate retry that
+          # waits until at least the EV minimum of 6A is safely available. The
+          # regular LB-aware charging script still performs the final clamp.
+          # Other strategies are recalculated by the NodeRed recovery trigger.
+          - if:
+              - condition: template
+                value_template: "{{ strategy == 'Manual' and previous_hems >= 6 }}"
+            then:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
+      - service: logbook.log
+        data:
+          name: "Laadpaal Hard Fail-safe"
+          message: >
+            Hersteld na 30s stabiele data | Ingrijpen: {{ was_enforced }} | Strategie: {{ strategy }} |
+            Vorige HEMS: {{ previous_hems }}A | LB beschikbaar: {{ lb_limit }}A
+          entity_id: input_boolean.bender_failsafe_observed
+
+  # Manual stores its desired value in the live HEMS register. A fail-safe sets
+  # that register to 0A, so a one-shot recovery can fail when less than 6A is
+  # available at that exact moment. Keep retrying without writing until at least
+  # 6A is safe. Any confirmed positive HEMS value completes the retry, including
+  # a manual user override, so this automation never fights a later choice.
+  - alias: "Bender Manual Fail-safe Herstel Opnieuw Proberen"
+    id: "bender_manual_failsafe_restore_retry"
+    description: "Hervat Manual veilig zodra na een fail-safe minimaal 6A beschikbaar is"
+    mode: single
+    trigger:
+      - platform: time_pattern
+        seconds: "/10"
+      - platform: state
+        entity_id:
+          - sensor.bender_hems_limit
+          - input_select.bender_charging_strategy
+          - input_select.bender_failsafe_mode
+    condition:
+      - condition: state
+        entity_id: input_boolean.bender_failsafe_manual_restore_pending
+        state: "on"
+    variables:
+      strategy: "{{ states('input_select.bender_charging_strategy') }}"
+      failsafe_mode: "{{ states('input_select.bender_failsafe_mode') }}"
+      previous_hems: "{{ states('input_number.bender_failsafe_previous_hems') | int(0) }}"
+      current_hems_valid: >
+        {{ states('sensor.bender_hems_limit') not in ['unknown', 'unavailable'] }}
+      current_hems: "{{ states('sensor.bender_hems_limit') | int(0) }}"
+      lb_enabled: "{{ is_state('input_boolean.bender_loadbalancer_enabled', 'on') }}"
+      lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(0) }}"
+      safe_current: >
+        {% if lb_enabled %}
+          {{ [previous_hems, lb_limit, 16] | min | int }}
+        {% else %}
+          {{ [previous_hems, 16] | min | int }}
+        {% endif %}
+    action:
+      - choose:
+          # Changing strategy/mode is an explicit user choice: cancel the old
+          # Manual recovery instead of applying a delayed current unexpectedly.
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{ strategy != 'Manual' or failsafe_mode != 'Actief' or previous_hems < 6 }}
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
+              - service: logbook.log
+                data:
+                  name: "Laadpaal Manual Herstel"
+                  message: >
+                    Automatisch herstel geannuleerd | Strategie: {{ strategy }} |
+                    Fail-safe modus: {{ failsafe_mode }} | Vorige HEMS: {{ previous_hems }}A
+                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
+
+          # A confirmed positive read-back means either the automatic retry or
+          # a manual override succeeded. Stop immediately to avoid later raises.
+          - conditions:
+              - condition: template
+                value_template: "{{ current_hems_valid and current_hems >= 6 }}"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
+              - service: logbook.log
+                data:
+                  name: "Laadpaal Manual Herstel"
+                  message: >
+                    Herstel bevestigd op {{ current_hems }}A; opgeslagen waarde was {{ previous_hems }}A
+                  entity_id: sensor.bender_hems_limit
+
+          # Do nothing while either watchdog input is unhealthy. At 6A or more,
+          # request the saved value; bender_set_charging_current clamps it to the
+          # currently available load-balancer capacity.
+          - conditions:
+              - condition: state
+                entity_id: binary_sensor.bender_dsmr_data_healthy
+                state: "on"
+              - condition: state
+                entity_id: binary_sensor.bender_nodered_heartbeat_healthy
+                state: "on"
+              - condition: state
+                entity_id: input_boolean.bender_failsafe_active
+                state: "off"
+              - condition: template
+                value_template: >
+                  {{ current_hems_valid and current_hems < 6 and safe_current >= 6 }}
+            sequence:
+              - action: script.turn_on
+                target:
+                  entity_id: script.bender_set_charging_current
+                data:
+                  variables:
+                    current: "{{ previous_hems }}"
+              - service: logbook.log
+                data:
+                  name: "Laadpaal Manual Herstel"
+                  message: >
+                    Herpoging gestart | Opgeslagen: {{ previous_hems }}A |
+                    Veilig beschikbaar: {{ safe_current }}A | LB: {{ lb_limit | round(1) }}A
+                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
 
   # Beëindigt de laadsessie op het ingestelde tijdstip door de juiste RFID-pas aan te bieden
   - alias: "Bender Manual Sessie Stop op Tijdstip"

@@ -34,10 +34,10 @@
             "bender_chargepv_debug",
             "bender_chargepv_rate_limit"
         ],
-        "x": 14,
-        "y": 19,
-        "w": 1192,
-        "h": 422
+        "x": 24,
+        "y": 39,
+        "w": 1022,
+        "h": 402
     },
     {
         "id": "bender_chargepv_start_link",
@@ -74,7 +74,7 @@
             "regex": []
         },
         "outputInitially": false,
-        "stateType": "num",
+        "stateType": "str",
         "ifState": "",
         "ifStateType": "str",
         "ifStateOperator": "is",
@@ -91,7 +91,7 @@
             {
                 "property": "payload",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -198,13 +198,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "input_number.bender_strategy_pv_min_surplus",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "chargepv.min_surplus",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -232,13 +232,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "input_number.bender_strategy_max_current",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "chargepv.max_current",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -266,13 +266,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "sensor.p1_meter_power",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "chargepv.p1_power",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -300,13 +300,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "sensor.dsmr_reading_phase_voltage_l1",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "chargepv.voltage_l1",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -334,13 +334,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "sensor.dsmr_reading_phase_voltage_l2",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "chargepv.voltage_l2",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -368,13 +368,13 @@
         "halt_if_type": "str",
         "halt_if_compare": "is",
         "entity_id": "sensor.dsmr_reading_phase_voltage_l3",
-        "state_type": "num",
+        "state_type": "str",
         "blockInputOverrides": false,
         "outputProperties": [
             {
                 "property": "chargepv.voltage_l3",
                 "propertyType": "msg",
-                "value": "",
+                "value": "number",
                 "valueType": "entityState"
             }
         ],
@@ -567,7 +567,7 @@
         "z": "bender_strategy_chargepv_tab",
         "g": "bender_chargepv_group",
         "name": "ChargePV log",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": true,
