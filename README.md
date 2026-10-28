@@ -82,7 +82,7 @@ De coördinator in Node-RED verwerkt verlagingen direct. Voor overige loadbalanc
 
 Bij ingeschakelde loadbalancing blokkeert de centrale HEMS-schrijver een ongeldige laadruimtesensor op **0 A**, ook bij Manual. Hij controleert de onderliggende DSMR-waarden opnieuw vóór de opdracht, zodat hij niet afhankelijk is van een nog niet bijgewerkte gezondheidsstatus. De loadbalancersensor zelf geeft bij onbruikbare brongegevens eveneens 0 A. De bestaande watchdog gebruikt de foutreden voor de fail-safe en melding.
 
-Het spanningsbereik **180–260 V** is een bewust gekozen controle op bruikbare meetgegevens voor deze 230V-installatie; het vervangt geen elektrische netbeveiliging. De vijf seconden kloktolerantie is alleen bedoeld voor een kleine afwijking. De controle bewijst nog niet dat alle losse MQTT-velden uit hetzelfde telegram komen. Een gezonde heartbeat bewijst evenmin dat iedere HEMS-opdracht bevestigd is; die onafhankelijke uitvoeringsbewaking volgt in een aparte fase.
+Het spanningsbereik **180–260 V** is een bewust gekozen controle op bruikbare meetgegevens voor deze 230V-installatie; het vervangt geen elektrische netbeveiliging. De vijf seconden kloktolerantie is alleen bedoeld voor een kleine afwijking. De controle bewijst nog niet dat alle losse MQTT-velden uit hetzelfde telegram komen. Een gezonde heartbeat bewijst evenmin dat iedere HEMS-opdracht bevestigd is; daarvoor is er een afzonderlijke HEMS-terugmeldingsbewaking in Home Assistant.
 
 ## Gezondheidsbewaking en harde fail-safe
 
@@ -91,12 +91,17 @@ Het spanningsbereik **180–260 V** is een bewust gekozen controle op bruikbare 
 Home Assistant controleert iedere 5 seconden:
 
 - **DSMR-gezondheid:** `sensor.dsmr_reading_timestamp` mag maximaal 30 seconden oud zijn en maximaal 5 seconden vooruitlopen. Alle vereiste DSMR/P1-entiteiten moeten eindige getallen zijn. Fasespanningen moeten binnen 180–260 V liggen; afzonderlijke afname en teruglevering per fase mogen niet negatief zijn. Nulverbruik en negatieve totale P1-nettovermogens zijn wel geldig;
-- **Node-RED-gezondheid:** de Master-flow schrijft iedere 10 seconden een heartbeat naar Home Assistant; deze mag niet ouder zijn dan 30 seconden.
+- **Node-RED-gezondheid:** de Master-flow schrijft iedere 10 seconden een heartbeat naar Home Assistant; deze mag niet ouder zijn dan 30 seconden;
+- **HEMS-uitvoering:** de bewaakte opdracht moet exact terugkomen in een nieuwe Modbus-rapportage. De terugmelding mag maximaal 45 seconden oud zijn. Een gewijzigde opdracht krijgt maximaal 45 seconden bevestigingstijd, gecontroleerd iedere 5 seconden.
 
 De actuele toestand is zichtbaar via onder andere:
 
 - `binary_sensor.bender_dsmr_data_healthy`;
 - `binary_sensor.bender_nodered_heartbeat_healthy`;
+- `binary_sensor.bender_hems_control_healthy`;
+- `binary_sensor.bender_hems_command_confirmed`;
+- `sensor.bender_hems_command_status`;
+- `sensor.bender_requested_current`;
 - `binary_sensor.bender_charging_control_healthy`;
 - `sensor.bender_dsmr_data_leeftijd`;
 - `sensor.bender_nodered_heartbeat_age`;
@@ -108,9 +113,21 @@ De actuele toestand is zichtbaar via onder andere:
 | --- | --- |
 | **Uit** | Watchdog grijpt niet in en wist een geobserveerde storingsstatus. Alleen gebruiken voor bewust onderhoud of diagnose. |
 | **Monitoren** | Detecteert en logt storingen, maar verandert de HEMS-limiet niet. Geschikt voor ingebruikname en gepland onderhoud. |
-| **Actief** | Detecteert de storing, blokkeert positieve laadopdrachten en verstuurt asynchroon een pauzeopdracht van `0 A` naar de Bender. Zolang de storing bestaat, wordt een afwijkende positieve HEMS-limiet opnieuw naar `0 A` gestuurd. |
+| **Actief** | Detecteert de storing, blokkeert positieve laadopdrachten en verstuurt asynchroon een pauzeopdracht van `0 A` naar de Bender. Zolang de stop niet bevestigd is, wordt `0 A` opnieuw geprobeerd, ook bij ontbrekende terugmelding; een lopende schrijfopdracht wordt daarbij niet telkens opnieuw afgebroken. |
 
-Na herstel start een stabilisatietimer van 30 seconden. Alleen als zowel DSMR als Node-RED gedurende die periode gezond blijven, wordt de fail-safe opgeheven en de actieve strategie opnieuw beoordeeld. Een terugkerende storing onderbreekt de timer.
+Na herstel start een stabilisatietimer van 30 seconden. Na actief ingrijpen moet eerst een verse terugmelding van **0 A** zijn ontvangen. Alleen als DSMR, Node-RED en HEMS gedurende die periode gezond blijven, wordt de fail-safe opgeheven en de actieve strategie opnieuw beoordeeld. Een terugkerende storing onderbreekt de timer.
+
+### Onafhankelijke HEMS-opdrachtbewaking
+
+De centrale schrijver bewaart de begrensde opdracht in `input_number.bender_requested_current` **vóór** de Modbus-aanroep. Een geslaagde serviceaanroep telt nog niet als bevestiging: `sensor.bender_hems_limit` moet exact dezelfde waarde terugmelden, met `last_reported` op of na de opdracht. Ook een ongewijzigde meetwaarde kan daardoor een nieuwe rapportage zijn. HEMS wordt ongeveer iedere 30 seconden uitgelezen; tijdens de normale wachttijd blijft de besturing gezond zolang de bestaande terugmelding actueel is.
+
+`input_number.bender_hems_unconfirmed_since` bewaart het begin van de oudste nog onbevestigde opdracht. Herhaalde pogingen en tussentijdse wijzigingen verlengen die termijn niet. Na bevestiging wordt de interne tijdmarkering gewist. Deze twee interne helpers zijn geen gebruikersbediening. `input_number.bender_commanded_current` blijft apart bestaan voor de veilige verrekening van laadstroom in de loadbalancer.
+
+In fail-safe-modus **Actief** controleert `Bender Onafhankelijke HEMS Bewaking` iedere 5 seconden ook of de gevraagde, geschreven of teruggemelde limiet boven de veilige grens ligt. De controle kan zelfstandig verlagen of stoppen wanneer Node-RED een verlaging mist. Ze verhoogt nooit zelfstandig de opdracht. Een onbevestigde nulopdracht wordt vanaf 10 seconden opnieuw geprobeerd, zolang de schrijver niet al loopt. De bestaande watchdog verwerkt een te oude of onbevestigde HEMS-terugmelding als storing en gebruikt hiervoor dezelfde push- en herstelprocedure. Een mislukte push mag de verdere afhandeling niet afbreken.
+
+Op **Instellingen → Data Actualiteit** zijn de opdrachtstatus, gevraagde stroom, teruggemelde stroom en gezondheid zichtbaar. Mogelijke statussen zijn `Bevestigd`, `Wacht op terugmelding`, `Geen actuele terugmelding` en `Opdracht niet bevestigd`.
+
+Dit bevestigt het HEMS-register; het bewijst op zichzelf geen fysieke uitschakeling van de contactor. Bij verlies van de volledige Modbus-verbinding kan HA geen stop garanderen. De bestaande controllerinstellingen voor communicatietimeout en Safe Current zijn in deze fase niet veranderd of fysiek als netwerkuitvaltest gevalideerd.
 
 ### Pushberichten
 
@@ -246,7 +263,7 @@ Gebruik voor de eerste controle een moment waarop de auto niet actief laadt.
 
 1. Zet **Fail-safe modus** eerst op `Monitoren`.
 2. Controleer op het tabblad Debugging dat Modbus-sensoren waarden ontvangen.
-3. Controleer dat DSMR en Node-RED beide gezond worden weergegeven.
+3. Controleer dat DSMR, Node-RED en HEMS gezond worden weergegeven.
 4. Stel de capaciteit van de huisaansluiting in. De standaardwaarde `17.250 W` past bij de gebruikte 3 × 25 A-benadering.
 5. Stel een passende loadbalancermarge in; standaard is `1.000 W`.
 6. Schakel de loadbalancer in.
@@ -278,7 +295,7 @@ node --test tests/bender-master-loadbalancer.test.cjs
 python -m unittest discover -s tests -p 'test_*.py'
 ```
 
-De tests dekken berichtpieken, onmiddellijke verlagingen, annuleren van een wachtende verhoging, ontbrekende/ongeldige waarden, oude nulmetingen, fouten bij schrijven en de gemeten ongewenste 0 → 6 A-overgang. Ze vervangen geen fysieke laadtest of controle van HA's timers en de Modbus-terugmelding.
+De tests dekken berichtpieken, onmiddellijke verlagingen, annuleren van een wachtende verhoging, ontbrekende/ongeldige waarden, oude nulmetingen, fouten bij schrijven en de gemeten ongewenste 0 → 6 A-overgang. De opdrachtbewaking heeft daarnaast regressietests voor exacte en verse terugmelding, de 45-secondenlimiet, behoud van de oudste deadline, herstel na bevestigde nul en zelfstandig verlagen zonder verhogingen. Ze vervangen geen fysieke laadtest of controle van HA's timers en de Modbus-terugmelding.
 
 ## Gecontroleerd testen van de fail-safe
 
@@ -342,7 +359,7 @@ Controleer achtereenvolgens:
 
 1. `input_boolean.bender_failsafe_active`;
 2. `input_text.bender_failsafe_reason`;
-3. beide gezondheids-binary-sensors;
+3. de DSMR-, Node-RED- en HEMS-gezondheid en de HEMS-opdrachtstatus;
 4. de beschikbare loadbalancerstroom;
 5. of minstens `6 A` beschikbaar is;
 6. bij Manual: `input_boolean.bender_failsafe_manual_restore_pending`.
@@ -407,4 +424,4 @@ Controleer deze punten opnieuw na het wijzigen van integraties, entity-id's, de 
 
 ---
 
-Laatst inhoudelijk gecontroleerd tegen de Home Assistant-package-, dashboard- en Node-RED-code: **september 2026**.
+Laatst inhoudelijk gecontroleerd tegen de Home Assistant-package-, dashboard- en Node-RED-code: **september 2026**. De Master-, Direct-, meetgegevens- en HEMS-veiligheidslaag en bijbehorende documentatie zijn bijgewerkt op **28 oktober 2026**.

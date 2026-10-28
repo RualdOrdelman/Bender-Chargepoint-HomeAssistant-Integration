@@ -4,7 +4,7 @@ from test_bender_stop_safety import Harness,TEMPLATES,NOW
 class MeasurementSafetyTests(unittest.TestCase):
     def harness(self):
         h=Harness();h.states.set('input_select.bender_charging_strategy','Manual')
-        h.states.set('sensor.bender_hems_limit','10');h.states.set('input_number.bender_commanded_current','10')
+        h.states.set('input_number.bender_requested_current','10',changed=NOW-60);h.states.set('sensor.bender_hems_limit','10');h.states.set('input_number.bender_commanded_current','10')
         return h
     def assert_rejected(self,h):
         self.assertEqual(h.template('bender_dsmr_data_healthy'),'False')

@@ -48,6 +48,8 @@ class Harness:
         for e,v in {'input_select.bender_charging_strategy':'Direct','input_boolean.bender_failsafe_active':'off',
             'input_boolean.bender_loadbalancer_enabled':'on','binary_sensor.bender_charging_control_healthy':'on',
             'binary_sensor.bender_direct_resume_ready':'off','binary_sensor.bender_charger_stopped_fresh':'off',
+            'input_number.bender_requested_current':'0.0','input_number.bender_hems_unconfirmed_since':'0.0',
+            'binary_sensor.bender_nodered_heartbeat_healthy':'on','script.set_bender_hems_limit':'off',
             'input_number.bender_commanded_current':'0.0','input_number.bender_strategy_max_current':'6',
             'sensor.bender_loadbalancer_available_current':'16','sensor.bender_hems_limit':'0',
             'input_number.bender_house_max_power':'5000','input_number.bender_loadbalancer_margin':'5000',
@@ -63,7 +65,17 @@ class Harness:
         if not isinstance(value,str):return value
         return self.env.from_string(value).render(**(variables or {})).strip()
     def truth(self,value,variables):return self.render(value,variables).lower() in ('true','on','1')
-    def template(self,name):return self.render(TEMPLATES[name]['state'])
+    def variables(self,definitions,initial=None):
+        values=dict(initial or {})
+        for k,v in definitions.items():
+            value=self.render(v,values)
+            try:value=ast.literal_eval(value)
+            except (ValueError,SyntaxError,TypeError):pass
+            values[k]=value
+        return values
+    def template(self,name):
+        group=next(g for g in PACKAGE['template'] if any(x.get('unique_id')==name for kind in ['sensor','binary_sensor'] for x in g.get(kind,[])))
+        return self.render(TEMPLATES[name]['state'],self.variables(group.get('variables',{})))
     def conditions(self,items,variables):
         return all(self.truth(x['value_template'],variables) if x['condition']=='template' else self.states(x['entity_id'])==x['state'] for x in items)
     def run(self,name,**variables):

@@ -519,6 +519,14 @@ views:
                   - entity: binary_sensor.bender_nodered_heartbeat_healthy
                     name: NodeRed Verbinding Gezond
                     icon: mdi:lan-connect
+                  - entity: binary_sensor.bender_hems_control_healthy
+                    name: Laadpaal Terugmelding Gezond
+                  - entity: sensor.bender_hems_command_status
+                    name: HEMS Opdrachtbevestiging
+                  - entity: sensor.bender_requested_current
+                    name: HEMS Gevraagd
+                  - entity: sensor.bender_hems_limit
+                    name: HEMS Teruggemeld
                   - entity: sensor.bender_nodered_heartbeat_age
                     name: NodeRed Heartbeat Leeftijd
                     icon: mdi:heart-pulse
@@ -748,6 +756,14 @@ views:
                   - entity: input_text.bender_failsafe_reason
                     name: Fail-safe Reden
                     icon: mdi:shield-alert
+                  - entity: binary_sensor.bender_hems_control_healthy
+                    name: Laadpaal Terugmelding Gezond
+                  - entity: sensor.bender_hems_command_status
+                    name: HEMS Opdrachtbevestiging
+                  - entity: sensor.bender_requested_current
+                    name: HEMS Gevraagd
+                  - entity: sensor.bender_hems_limit
+                    name: HEMS Teruggemeld
                   - entity: sensor.bender_nodered_heartbeat_age
                     name: NodeRed Heartbeat Leeftijd
                     icon: mdi:heart-pulse

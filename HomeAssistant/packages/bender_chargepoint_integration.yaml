@@ -166,10 +166,29 @@ modbus:
 ###########################################################################################################
 input_number:
 
+  # Guarded demand, recorded before attempting Modbus; never edit these helpers manually.
+  bender_requested_current:
+    name: Laadpaal bewaakte opdracht
+    min: 0
+    max: 16
+    step: 1
+    initial: 0
+    unit_of_measurement: "A"
+    mode: box
+
+  # Oldest unresolved command, not the latest retry. Epoch avoids timezone ambiguity.
+  bender_hems_unconfirmed_since:
+    name: Laadpaal onbevestigd sinds (intern)
+    min: 0
+    max: 4102444800
+    step: 0.001
+    initial: 0
+    mode: box
+
   # Last successful positive command; a stop is recorded BEFORE the write.
   # Start conservatively after HA restarts, even if the controller retained 16A.
   bender_commanded_current:
-    name: Laadpaal laatst gevraagde stroom
+    name: Laadpaal stroom voor LB-verrekening
     min: 0
     max: 16
     step: 1
@@ -355,6 +374,70 @@ timer:
 # TEMPLATE SENSORS
 ###########################################################################################################
 template:
+
+  # Independent execution feedback; a successful service call is not an acknowledgement.
+  - triggers:
+    - trigger: time_pattern
+      seconds: /5
+    - trigger: homeassistant
+      event: start
+    - trigger: state
+      entity_id:
+      - input_number.bender_requested_current
+      - sensor.bender_hems_limit
+      - input_boolean.bender_failsafe_active
+    variables:
+      ack_target: '{{ states(''input_number.bender_requested_current'') | float(-1) }}'
+      ack_requested_at: '{{ as_timestamp(states.input_number.bender_requested_current.last_changed, 0) }}'
+      ack_reported_at: '{{ as_timestamp(states.sensor.bender_hems_limit.last_reported, 0) }}'
+      ack_feedback_age: '{{ as_timestamp(now()) - ack_reported_at | float(0) }}'
+      ack_pending_since: '{{ states(''input_number.bender_hems_unconfirmed_since'') | float(0) }}'
+      ack_wait_age: '{{ as_timestamp(now()) - (ack_pending_since | float if ack_pending_since | float > 0 else ack_requested_at
+        | float) }}'
+      ack_confirmed: |-
+        {{ is_number(states('input_number.bender_requested_current'))
+           and (ack_target | float == 0 or 6 <= ack_target | float <= 16)
+           and is_number(states('sensor.bender_hems_limit'))
+           and states('sensor.bender_hems_limit') | float == ack_target | float
+           and ack_reported_at | float >= ack_requested_at | float
+           and 0 <= ack_feedback_age | float <= 45 }}
+      ack_healthy: |-
+        {% if is_state('input_boolean.bender_failsafe_active', 'on') %}
+          {{ ack_confirmed and ack_target | float == 0 }}
+        {% else %}
+          {{ ack_confirmed or (0 <= ack_wait_age | float <= 45
+              and 0 <= ack_feedback_age | float <= 45
+              and is_number(states('sensor.bender_hems_limit'))
+              and (ack_target | float == 0 or 6 <= ack_target | float <= 16)) }}
+        {% endif %}
+    binary_sensor:
+    - name: Bender HEMS Command Confirmed
+      unique_id: bender_hems_command_confirmed
+      icon: mdi:check-network
+      state: '{{ ack_confirmed }}'
+    - name: Bender HEMS Control Healthy
+      unique_id: bender_hems_control_healthy
+      icon: mdi:shield-check
+      state: '{{ ack_healthy }}'
+    sensor:
+    - name: Bender Requested Current
+      unique_id: bender_requested_current
+      unit_of_measurement: A
+      state: '{{ ack_target }}'
+    - name: Bender HEMS Command Status
+      unique_id: bender_hems_command_status
+      icon: mdi:list-status
+      state: |-
+        {% if ack_confirmed %}Bevestigd
+        {% elif not is_number(states('sensor.bender_hems_limit')) or not (0 <= ack_feedback_age | float <= 45) %}Geen actuele terugmelding
+        {% elif ack_wait_age | float > 45 %}Opdracht niet bevestigd
+        {% else %}Wacht op terugmelding{% endif %}
+      attributes:
+        gevraagd_ampere: '{{ ack_target }}'
+        teruggemeld_ampere: '{{ states(''sensor.bender_hems_limit'') }}'
+        terugmelding_leeftijd_s: '{{ ack_feedback_age | float | round(1) }}'
+        onbevestigd_s: '{{ 0 if ack_confirmed else ack_wait_age | float | round(1) }}'
+
   - sensor:
       - name: "Bender_Charge_Point_Status"
         state: >
@@ -910,6 +993,7 @@ template:
         state: >
           {{ is_state('binary_sensor.bender_dsmr_data_healthy', 'on')
              and is_state('binary_sensor.bender_nodered_heartbeat_healthy', 'on')
+             and is_state('binary_sensor.bender_hems_control_healthy', 'on')
              and is_state('input_boolean.bender_failsafe_active', 'off') }}
 
   # Poll report timestamps as well as state changes: unchanged zero readings
@@ -1002,6 +1086,29 @@ script:
       - variables:
           requested_current: "{{ [[current | int(0), 0] | max, 16] | min }}"
           previous_command: "{{ states('input_number.bender_commanded_current') | int(0) }}"
+          ack_target: '{{ states(''input_number.bender_requested_current'') | float(-1) }}'
+          ack_requested_at: '{{ as_timestamp(states.input_number.bender_requested_current.last_changed, 0) }}'
+          ack_reported_at: '{{ as_timestamp(states.sensor.bender_hems_limit.last_reported, 0) }}'
+          ack_feedback_age: '{{ as_timestamp(now()) - ack_reported_at | float(0) }}'
+          ack_pending_since: '{{ states(''input_number.bender_hems_unconfirmed_since'') | float(0) }}'
+          ack_wait_age: '{{ as_timestamp(now()) - (ack_pending_since | float if ack_pending_since | float > 0 else ack_requested_at
+            | float) }}'
+          ack_confirmed: |-
+            {{ is_number(states('input_number.bender_requested_current'))
+               and (ack_target | float == 0 or 6 <= ack_target | float <= 16)
+               and is_number(states('sensor.bender_hems_limit'))
+               and states('sensor.bender_hems_limit') | float == ack_target | float
+               and ack_reported_at | float >= ack_requested_at | float
+               and 0 <= ack_feedback_age | float <= 45 }}
+          ack_healthy: |-
+            {% if is_state('input_boolean.bender_failsafe_active', 'on') %}
+              {{ ack_confirmed and ack_target | float == 0 }}
+            {% else %}
+              {{ ack_confirmed or (0 <= ack_wait_age | float <= 45
+                  and 0 <= ack_feedback_age | float <= 45
+                  and is_number(states('sensor.bender_hems_limit'))
+                  and (ack_target | float == 0 or 6 <= ack_target | float <= 16)) }}
+            {% endif %}
           dsmr_inputs_valid: >
             {# Operational sanity bounds for this 230V installation, not a grid-protection relay. #}
             {% set required = ['sensor.dsmr_reading_phase_currently_delivered_l1', 'sensor.dsmr_reading_phase_currently_delivered_l2', 'sensor.dsmr_reading_phase_currently_delivered_l3', 'sensor.dsmr_reading_phase_currently_returned_l1', 'sensor.dsmr_reading_phase_currently_returned_l2', 'sensor.dsmr_reading_phase_currently_returned_l3', 'sensor.dsmr_reading_phase_voltage_l1', 'sensor.dsmr_reading_phase_voltage_l2', 'sensor.dsmr_reading_phase_voltage_l3', 'sensor.p1_meter_power'] %}
@@ -1029,6 +1136,7 @@ script:
             {% if requested < 6
                 or is_state('input_select.bender_charging_strategy', 'Uit')
                 or is_state('input_boolean.bender_failsafe_active', 'on')
+                or (is_state('input_select.bender_failsafe_mode', 'Actief') and not ack_healthy)
                 or (direct and not is_state('binary_sensor.bender_charging_control_healthy', 'on'))
                 or (direct and previous_command | int(0) == 0 and not resume) %}
               0
@@ -1041,15 +1149,33 @@ script:
               {{ requested }}
             {% endif %}
 
-      # Do not rewrite/log an already confirmed command on every refresh.
+      # Do not rewrite/log an already freshly confirmed command on every refresh.
       - if:
           - condition: template
             value_template: >
               {{ previous_command | int(0) == applied_current | int(0)
                  and is_number(states('sensor.bender_hems_limit'))
-                 and states('sensor.bender_hems_limit') | int(-1) == applied_current | int(0) }}
+                 and states('sensor.bender_hems_limit') | float(-1) == applied_current | int(0)
+                 and ack_confirmed and ack_target | float == applied_current | int(0) }}
         then:
           - stop: "HEMS-opdracht is al bevestigd"
+
+      # Keep the oldest unresolved deadline. Retrying or changing the target
+      # cannot postpone the watchdog indefinitely. Record intent even if Modbus fails.
+      - if:
+          - condition: template
+            value_template: "{{ ack_pending_since | float <= 0 or ack_confirmed }}"
+        then:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.bender_hems_unconfirmed_since
+            data:
+              value: "{{ as_timestamp(now()) }}"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.bender_requested_current
+        data:
+          value: "{{ applied_current }}"
 
       # Suppress old charger-current credit BEFORE sending zero. Repeated zero
       # commands do not reset last_changed, so the fresh-data wait can finish.
@@ -1270,20 +1396,109 @@ script:
 ###########################################################################################################
 automation:
 
+  - alias: Bender Onafhankelijke HEMS Bewaking
+    id: bender_independent_hems_guard
+    description: Controleert terugmelding en verlaagt onafhankelijk van NodeRed; verhoogt nooit zelfstandig.
+    mode: single
+    trigger:
+    - platform: time_pattern
+      seconds: /5
+    - platform: state
+      entity_id:
+      - input_select.bender_charging_strategy
+      - input_boolean.bender_failsafe_active
+    variables:
+      ack_target: '{{ states(''input_number.bender_requested_current'') | float(-1) }}'
+      ack_requested_at: '{{ as_timestamp(states.input_number.bender_requested_current.last_changed, 0) }}'
+      ack_reported_at: '{{ as_timestamp(states.sensor.bender_hems_limit.last_reported, 0) }}'
+      ack_feedback_age: '{{ as_timestamp(now()) - ack_reported_at | float(0) }}'
+      ack_pending_since: '{{ states(''input_number.bender_hems_unconfirmed_since'') | float(0) }}'
+      ack_wait_age: '{{ as_timestamp(now()) - (ack_pending_since | float if ack_pending_since | float > 0 else ack_requested_at
+        | float) }}'
+      ack_confirmed: |-
+        {{ is_number(states('input_number.bender_requested_current'))
+           and (ack_target | float == 0 or 6 <= ack_target | float <= 16)
+           and is_number(states('sensor.bender_hems_limit'))
+           and states('sensor.bender_hems_limit') | float == ack_target | float
+           and ack_reported_at | float >= ack_requested_at | float
+           and 0 <= ack_feedback_age | float <= 45 }}
+      ack_healthy: |-
+        {% if is_state('input_boolean.bender_failsafe_active', 'on') %}
+          {{ ack_confirmed and ack_target | float == 0 }}
+        {% else %}
+          {{ ack_confirmed or (0 <= ack_wait_age | float <= 45
+              and 0 <= ack_feedback_age | float <= 45
+              and is_number(states('sensor.bender_hems_limit'))
+              and (ack_target | float == 0 or 6 <= ack_target | float <= 16)) }}
+        {% endif %}
+      safe_ceiling: |-
+        {% set lb = states('sensor.bender_loadbalancer_available_current') %}
+        {% if is_state('input_select.bender_charging_strategy', 'Uit')
+              or is_state('input_boolean.bender_failsafe_active', 'on')
+              or not is_state('binary_sensor.bender_dsmr_data_healthy', 'on')
+              or not is_state('binary_sensor.bender_nodered_heartbeat_healthy', 'on')
+              or not ack_healthy %}
+          0
+        {% elif is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
+          {% set cap = [lb | float(0), 16] | min | int if is_number(lb) else 0 %}
+          {{ cap if cap >= 6 else 0 }}
+        {% else %}16{% endif %}
+      lower_target: '{{ [[ack_target | int(0), safe_ceiling | int(0)] | min, 0] | max }}'
+      must_lower: |-
+        {{ ack_target | float > safe_ceiling | float
+           or states('input_number.bender_commanded_current') | float(0) > safe_ceiling | float
+           or (is_number(states('sensor.bender_hems_limit'))
+               and states('sensor.bender_hems_limit') | float > safe_ceiling | float) }}
+      retry_stop: '{{ ack_target | float == 0 and not ack_confirmed and ack_wait_age | float >= 10 }}'
+    action:
+    - if:
+      - condition: template
+        value_template: '{{ ack_confirmed and ack_pending_since | float > 0 and is_state(''script.set_bender_hems_limit'', ''off'')
+          and as_timestamp(states.input_number.bender_requested_current.last_changed, 0) == ack_requested_at | float }}'
+      then:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.bender_hems_unconfirmed_since
+        data:
+          value: 0
+    - if:
+      - condition: state
+        entity_id: input_select.bender_failsafe_mode
+        state: Actief
+      - condition: state
+        entity_id: script.set_bender_hems_limit
+        state: 'off'
+      - condition: template
+        value_template: '{{ must_lower or retry_stop }}'
+      then:
+      - action: script.turn_on
+        target:
+          entity_id: script.set_bender_hems_limit
+        data:
+          variables:
+            current: '{{ lower_target }}'
+
+
   # Hard fail-safe watchdog. In Monitoren it only records what it sees. Only
   # mode Actief may set the HEMS limit to 0A and block NodeRed strategies.
   - alias: "Bender Hard Fail-safe Watchdog"
     id: "bender_hard_failsafe_watchdog"
-    description: "Bewaakt DSMR en NodeRed; grijpt alleen in wanneer de fail-safe modus Actief is"
+    description: "Bewaakt DSMR, NodeRed en HEMS-terugmelding; grijpt alleen in modus Actief in"
     mode: single
     trigger:
       - platform: time_pattern
         seconds: "/5"
       - platform: homeassistant
         event: start
+      - platform: state
+        entity_id:
+          - binary_sensor.bender_hems_control_healthy
+          - binary_sensor.bender_dsmr_data_healthy
+          - binary_sensor.bender_nodered_heartbeat_healthy
     variables:
       dsmr_healthy: "{{ is_state('binary_sensor.bender_dsmr_data_healthy', 'on') }}"
       nodered_healthy: "{{ is_state('binary_sensor.bender_nodered_heartbeat_healthy', 'on') }}"
+      hems_healthy: "{{ is_state('binary_sensor.bender_hems_control_healthy', 'on') }}"
       failsafe_mode: "{{ states('input_select.bender_failsafe_mode') }}"
       failsafe_was_active: "{{ is_state('input_boolean.bender_failsafe_active', 'on') }}"
       fault_was_observed: "{{ is_state('input_boolean.bender_failsafe_observed', 'on') }}"
@@ -1294,6 +1509,8 @@ automation:
           DSMR-data ontbreekt of is ouder dan 30s{% if invalid %}: {{ invalid[:170] }}{% endif %}
         {% elif not nodered_healthy %}
           NodeRed-heartbeat is {{ states('sensor.bender_nodered_heartbeat_age') | int(999999) }}s oud
+        {% elif not hems_healthy %}
+          HEMS-terugmelding ontbreekt of bevestigt opdracht niet: gevraagd {{ states('input_number.bender_requested_current') }}A, gemeten {{ states('sensor.bender_hems_limit') }}A
         {% else %}
           Onbekende besturingsfout
         {% endif %}
@@ -1356,7 +1573,7 @@ automation:
 
           - conditions:
               - condition: template
-                value_template: "{{ not dsmr_healthy or not nodered_healthy }}"
+                value_template: "{{ not dsmr_healthy or not nodered_healthy or not hems_healthy }}"
             sequence:
               - if:
                   - condition: state
@@ -1424,6 +1641,7 @@ automation:
                         value_template: "{{ notifications_enabled }}"
                     then:
                       - action: notify.send_message
+                        continue_on_error: true
                         target:
                           entity_id: notify.iphone_17_ruald
                         data:
@@ -1445,8 +1663,8 @@ automation:
                     value_template: >
                       {{ failsafe_mode == 'Actief'
                          and failsafe_was_active
-                         and states('sensor.bender_hems_limit') not in ['unknown', 'unavailable']
-                         and states('sensor.bender_hems_limit') | int(0) != 0 }}
+                         and not is_state('binary_sensor.bender_hems_command_confirmed', 'on')
+                         and is_state('script.set_bender_hems_limit', 'off') }}
                 then:
                   - action: script.turn_on
                     target:
@@ -1472,7 +1690,7 @@ automation:
 
   - alias: "Bender Hard Fail-safe Hersteld"
     id: "bender_hard_failsafe_recovered"
-    description: "Hervat de strategie pas na 30 seconden gezonde DSMR-data en NodeRed-heartbeat"
+    description: "Hervat pas na 30s gezonde DSMR, NodeRed en HEMS-terugmelding; bij ingrijpen is eerst 0A bevestigd"
     mode: single
     trigger:
       - platform: event
@@ -1488,6 +1706,9 @@ automation:
         state: "on"
       - condition: state
         entity_id: binary_sensor.bender_nodered_heartbeat_healthy
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.bender_hems_control_healthy
         state: "on"
     action:
       - variables:
@@ -1505,7 +1726,7 @@ automation:
         target:
           entity_id: input_text.bender_failsafe_reason
         data:
-          value: "Geen storing - DSMR en NodeRed zijn 30s stabiel"
+          value: "Geen storing - DSMR, NodeRed en HEMS zijn 30s stabiel"
       - if:
           - condition: template
             value_template: "{{ was_enforced }}"
@@ -1520,11 +1741,12 @@ automation:
                 value_template: "{{ notifications_enabled }}"
             then:
               - action: notify.send_message
+                continue_on_error: true
                 target:
                   entity_id: notify.iphone_17_ruald
                 data:
                   message: >
-                    ✅ Laadpaal fail-safe opgeheven. DSMR en NodeRed zijn 30 seconden stabiel.
+                    ✅ Laadpaal fail-safe opgeheven. DSMR, NodeRed en HEMS zijn 30 seconden stabiel.
                     Strategie {{ strategy }} wordt opnieuw beoordeeld met {{ lb_limit }}A beschikbaar.
           # Manual has no independent setpoint: it normally reads the current
           # HEMS value, which is 0A after a fail-safe. Arm a separate retry that
@@ -1606,7 +1828,7 @@ automation:
           # a manual override succeeded. Stop immediately to avoid later raises.
           - conditions:
               - condition: template
-                value_template: "{{ current_hems_valid and current_hems >= 6 }}"
+                value_template: "{{ current_hems_valid and current_hems >= 6 and is_state('binary_sensor.bender_hems_command_confirmed', 'on') }}"
             sequence:
               - service: input_boolean.turn_off
                 target:
@@ -1633,7 +1855,8 @@ automation:
                 state: "off"
               - condition: template
                 value_template: >
-                  {{ current_hems_valid and current_hems < 6 and safe_current >= 6 }}
+                  {{ current_hems_valid and current_hems < 6 and safe_current >= 6
+                     and is_state('binary_sensor.bender_hems_control_healthy', 'on') }}
             sequence:
               - action: script.turn_on
                 target:
