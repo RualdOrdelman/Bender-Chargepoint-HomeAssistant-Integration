@@ -578,8 +578,23 @@ template:
         unit_of_measurement: "A"
         device_class: current
         state: >
-          {% if is_state('input_select.bender_failsafe_mode', 'Actief')
-                and not is_state('binary_sensor.bender_dsmr_data_healthy', 'on') %}
+          {# Operational sanity bounds for this 230V installation, not a grid-protection relay. #}
+          {% set required = ['sensor.dsmr_reading_phase_currently_delivered_l1', 'sensor.dsmr_reading_phase_currently_delivered_l2', 'sensor.dsmr_reading_phase_currently_delivered_l3', 'sensor.dsmr_reading_phase_currently_returned_l1', 'sensor.dsmr_reading_phase_currently_returned_l2', 'sensor.dsmr_reading_phase_currently_returned_l3', 'sensor.dsmr_reading_phase_voltage_l1', 'sensor.dsmr_reading_phase_voltage_l2', 'sensor.dsmr_reading_phase_voltage_l3', 'sensor.p1_meter_power'] %}
+          {% set entities = expand(required) %}
+          {% set telegram = as_timestamp(states('sensor.dsmr_reading_timestamp'), 0) %}
+          {% set telegram_age = as_timestamp(now()) - telegram if telegram > 0 else 999999 %}
+          {% set ns = namespace(valid=(entities | count == required | count and telegram > 0 and -5 <= telegram_age <= 30)) %}
+          {% for entity in entities %}
+            {% if not is_number(entity.state) %}
+              {% set ns.valid = false %}
+            {% elif 'phase_voltage_' in entity.entity_id and not (180 <= entity.state | float <= 260) %}
+              {% set ns.valid = false %}
+            {% elif 'phase_currently_' in entity.entity_id and entity.state | float < 0 %}
+              {% set ns.valid = false %}
+            {% endif %}
+          {% endfor %}
+          {% if (is_state('input_boolean.bender_loadbalancer_enabled', 'on')
+                   or is_state('input_select.bender_failsafe_mode', 'Actief')) and not ns.valid %}
             0.0
           {% elif is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
             {# --- Configuration --- #}
@@ -633,7 +648,10 @@ template:
         unit_of_measurement: "A"
         device_class: current
         state: >
-          {% if is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
+          {% set voltage = states('sensor.dsmr_reading_phase_voltage_l1') %}
+          {% if not is_number(voltage) or not (180 <= voltage | float(0) <= 260) %}
+            0.0
+          {% elif is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
             {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
             {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
@@ -650,7 +668,10 @@ template:
         unit_of_measurement: "A"
         device_class: current
         state: >
-          {% if is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
+          {% set voltage = states('sensor.dsmr_reading_phase_voltage_l2') %}
+          {% if not is_number(voltage) or not (180 <= voltage | float(0) <= 260) %}
+            0.0
+          {% elif is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
             {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
             {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
@@ -667,7 +688,10 @@ template:
         unit_of_measurement: "A"
         device_class: current
         state: >
-          {% if is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
+          {% set voltage = states('sensor.dsmr_reading_phase_voltage_l3') %}
+          {% if not is_number(voltage) or not (180 <= voltage | float(0) <= 260) %}
+            0.0
+          {% elif is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
             {% set max_power = states('input_number.bender_house_max_power') | float(17250) %}
             {% set margin_power = states('input_number.bender_loadbalancer_margin') | float(1000) %}
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
@@ -698,7 +722,7 @@ template:
             {{ states('sensor.dsmr_reading_timestamp') }}
           stale: >
             {% set telegram = as_timestamp(states('sensor.dsmr_reading_timestamp'), 0) %}
-            {{ telegram <= 0 or (as_timestamp(now()) - telegram) > 30 }}
+            {{ telegram <= 0 or not (-5 <= as_timestamp(now()) - telegram <= 30) }}
 
       # Total Power available for Charger (Visual Only)
       # Based on the bottleneck current * 3 phases * 230V
@@ -814,32 +838,22 @@ template:
         unique_id: "bender_dsmr_data_healthy"
         icon: mdi:meter-electric-outline
         state: >
-          {% set required = [
-            'sensor.dsmr_reading_phase_currently_delivered_l1',
-            'sensor.dsmr_reading_phase_currently_delivered_l2',
-            'sensor.dsmr_reading_phase_currently_delivered_l3',
-            'sensor.dsmr_reading_phase_currently_returned_l1',
-            'sensor.dsmr_reading_phase_currently_returned_l2',
-            'sensor.dsmr_reading_phase_currently_returned_l3',
-            'sensor.dsmr_reading_phase_voltage_l1',
-            'sensor.dsmr_reading_phase_voltage_l2',
-            'sensor.dsmr_reading_phase_voltage_l3',
-            'sensor.p1_meter_power'
-          ] %}
+          {# Operational sanity bounds for this 230V installation, not a grid-protection relay. #}
+          {% set required = ['sensor.dsmr_reading_phase_currently_delivered_l1', 'sensor.dsmr_reading_phase_currently_delivered_l2', 'sensor.dsmr_reading_phase_currently_delivered_l3', 'sensor.dsmr_reading_phase_currently_returned_l1', 'sensor.dsmr_reading_phase_currently_returned_l2', 'sensor.dsmr_reading_phase_currently_returned_l3', 'sensor.dsmr_reading_phase_voltage_l1', 'sensor.dsmr_reading_phase_voltage_l2', 'sensor.dsmr_reading_phase_voltage_l3', 'sensor.p1_meter_power'] %}
           {% set entities = expand(required) %}
           {% set telegram = as_timestamp(states('sensor.dsmr_reading_timestamp'), 0) %}
           {% set telegram_age = as_timestamp(now()) - telegram if telegram > 0 else 999999 %}
-          {% set ns = namespace(healthy=(
-            (entities | count) == (required | count)
-            and telegram_age <= 30
-          )) %}
+          {% set ns = namespace(valid=(entities | count == required | count and telegram > 0 and -5 <= telegram_age <= 30)) %}
           {% for entity in entities %}
-            {% if entity.state in ['unknown', 'unavailable', 'none', '']
-                  or not is_number(entity.state) %}
-              {% set ns.healthy = false %}
+            {% if not is_number(entity.state) %}
+              {% set ns.valid = false %}
+            {% elif 'phase_voltage_' in entity.entity_id and not (180 <= entity.state | float <= 260) %}
+              {% set ns.valid = false %}
+            {% elif 'phase_currently_' in entity.entity_id and entity.state | float < 0 %}
+              {% set ns.valid = false %}
             {% endif %}
           {% endfor %}
-          {{ ns.healthy }}
+          {{ ns.valid }}
         attributes:
           invalid_entities: >
             {% set required = [
@@ -861,6 +875,8 @@ template:
             {% set telegram_age = as_timestamp(now()) - telegram if telegram > 0 else 999999 %}
             {% if telegram <= 0 %}
               {% set ns.invalid = ns.invalid + ['sensor.dsmr_reading_timestamp ontbreekt of is ongeldig'] %}
+            {% elif telegram_age < -5 %}
+              {% set ns.invalid = ns.invalid + ['DSMR-timestamp ' ~ ((-telegram_age) | round(0) | int) ~ 's in de toekomst (maximaal 5s toegestaan)'] %}
             {% elif telegram_age > 30 %}
               {% set ns.invalid = ns.invalid + ['DSMR-telegram ' ~ (telegram_age | round(0) | int) ~ 's oud'] %}
             {% endif %}
@@ -874,6 +890,10 @@ template:
                 {% set ns.invalid = ns.invalid + [entity.entity_id ~ '=' ~ entity.state] %}
               {% elif not is_number(entity.state) %}
                 {% set ns.invalid = ns.invalid + [entity.entity_id ~ ' is niet numeriek: ' ~ entity.state] %}
+              {% elif 'phase_voltage_' in entity.entity_id and not (180 <= entity.state | float <= 260) %}
+                {% set ns.invalid = ns.invalid + [entity.entity_id ~ '=' ~ entity.state ~ 'V buiten bruikbaar bereik 180-260V'] %}
+              {% elif 'phase_currently_' in entity.entity_id and entity.state | float < 0 %}
+                {% set ns.invalid = ns.invalid + [entity.entity_id ~ '=' ~ entity.state ~ 'kW is negatief'] %}
               {% endif %}
             {% endfor %}
             {{ ns.invalid | join(', ') }}
@@ -982,6 +1002,23 @@ script:
       - variables:
           requested_current: "{{ [[current | int(0), 0] | max, 16] | min }}"
           previous_command: "{{ states('input_number.bender_commanded_current') | int(0) }}"
+          dsmr_inputs_valid: >
+            {# Operational sanity bounds for this 230V installation, not a grid-protection relay. #}
+            {% set required = ['sensor.dsmr_reading_phase_currently_delivered_l1', 'sensor.dsmr_reading_phase_currently_delivered_l2', 'sensor.dsmr_reading_phase_currently_delivered_l3', 'sensor.dsmr_reading_phase_currently_returned_l1', 'sensor.dsmr_reading_phase_currently_returned_l2', 'sensor.dsmr_reading_phase_currently_returned_l3', 'sensor.dsmr_reading_phase_voltage_l1', 'sensor.dsmr_reading_phase_voltage_l2', 'sensor.dsmr_reading_phase_voltage_l3', 'sensor.p1_meter_power'] %}
+            {% set entities = expand(required) %}
+            {% set telegram = as_timestamp(states('sensor.dsmr_reading_timestamp'), 0) %}
+            {% set telegram_age = as_timestamp(now()) - telegram if telegram > 0 else 999999 %}
+            {% set ns = namespace(valid=(entities | count == required | count and telegram > 0 and -5 <= telegram_age <= 30)) %}
+            {% for entity in entities %}
+              {% if not is_number(entity.state) %}
+                {% set ns.valid = false %}
+              {% elif 'phase_voltage_' in entity.entity_id and not (180 <= entity.state | float <= 260) %}
+                {% set ns.valid = false %}
+              {% elif 'phase_currently_' in entity.entity_id and entity.state | float < 0 %}
+                {% set ns.valid = false %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.valid }}
           applied_current: >
             {% set requested = requested_current | int(0) %}
             {% set direct = is_state('input_select.bender_charging_strategy', 'Direct') %}
@@ -995,9 +1032,9 @@ script:
                 or (direct and not is_state('binary_sensor.bender_charging_control_healthy', 'on'))
                 or (direct and previous_command | int(0) == 0 and not resume) %}
               0
-            {% elif direct and is_state('input_boolean.bender_loadbalancer_enabled', 'on') and not is_number(states('sensor.bender_loadbalancer_available_current')) %}
+            {% elif is_state('input_boolean.bender_loadbalancer_enabled', 'on') and (not dsmr_inputs_valid or not is_number(states('sensor.bender_loadbalancer_available_current'))) %}
               0
-            {% elif direct and is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
+            {% elif is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
               {% set allowed = [requested, states('sensor.bender_loadbalancer_available_current') | float(0)] | min | int %}
               {{ allowed if allowed >= 6 else 0 }}
             {% else %}
@@ -1156,7 +1193,7 @@ script:
       - variables:
           requested_current: "{{ current | int }}"
           lb_enabled: "{{ is_state('input_boolean.bender_loadbalancer_enabled', 'on') }}"
-          lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(16) }}"
+          lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(0) if is_number(states('sensor.bender_loadbalancer_available_current')) else 0 }}"
           
           # Calculate safe current:
           # If LB enabled: min(requested, lb_limit, 16)
@@ -1185,7 +1222,7 @@ script:
                     {% if is_state('input_boolean.bender_failsafe_active', 'on') %}
                       Fail-safe actief: {{ states('input_text.bender_failsafe_reason') }}
                     {% else %}
-                      Laden op {{ safe_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})
+                      Laden op {{ states('input_number.bender_commanded_current') | int(0) }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})
                     {% endif %}
         default:
           - service: script.bender_stop_charging

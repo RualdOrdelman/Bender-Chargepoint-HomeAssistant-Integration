@@ -14,3 +14,6 @@ HomeAssistant/packages/*_private.yaml
 .gemini/
 artifacts/
 .system_generated/
+
+# Local Python test caches
+__pycache__/

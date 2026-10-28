@@ -47,7 +47,7 @@ Home Assistant is de centrale veiligheidslaag. Node-RED bepaalt de gewenste stra
 | Strategie | Gedrag |
 | --- | --- |
 | **Uit** | Schrijft een HEMS-limiet van `0 A`. Dit pauzeert laden; het is geen fysieke vergrendeling van de laadpaal. |
-| **Direct** | Start direct met de ingestelde maximale laadstroom, begrensd op maximaal `16 A` en — indien ingeschakeld — door de loadbalancer. |
+| **Direct** | Start of hervat na bevestigde stilstand en 30 seconden stabiele laadruimte; gebruikt daarna de ingestelde maximale laadstroom, begrensd op `16 A` en de ingeschakelde loadbalancer. |
 | **Manual** | Behoudt de actuele HEMS-limiet als handmatige instelling. Als deze hoger is dan de beschikbare loadbalancerruimte, wordt hij veilig begrensd. |
 | **ChargePV** | Reageert op `sensor.p1_meter_power`, maximaal eenmaal per 10 seconden. Negatief P1-vermogen geldt als teruglevering. De flow rekent het overschot om naar een driefasen-laadstroom en laadt alleen vanaf minimaal `6 A` én het ingestelde minimale PV-overschot. |
 | **Dynamic** | Leest de vertrekdatum, benodigde kWh, maximale stroom en het `forecast`-attribuut van de Zonneplan-prijssensor. De goedkoopste benodigde uren vóór vertrek worden geselecteerd. Als de uiterste starttijd is bereikt, wordt laden als deadline-fallback gestart. De planning wordt bij activering en vervolgens ieder heel uur opnieuw berekend. |
@@ -74,11 +74,15 @@ De loadbalancer berekent per fase hoeveel stroom beschikbaar is. Daarvoor combin
 - de actuele stroom van de laadpaal per fase;
 - de ingestelde maximale capaciteit van de huisaansluiting;
 - een instelbare veiligheidsmarge;
-- de werkelijke fasespanning, met `230 V` als rekenfallback.
+- de werkelijke fasespanning; onbruikbare spanningen geven geen toestemming om te laden.
 
 De laagste beschikbare waarde van L1, L2 en L3 is bepalend. De uitkomst wordt op maximaal `16 A` begrensd. Minder dan `6 A` beschikbaar betekent een laadopdracht van `0 A`, omdat een EV normaal niet onder `6 A` kan laden.
 
 De coördinator in Node-RED verwerkt verlagingen direct. Voor overige loadbalancerupdates bewaart hij maximaal één laatste bericht en verwerkt dit uiterlijk na 5 seconden. Er wordt geen FIFO-wachtrij opgebouwd. De tijdelijke timer gebruikt de standaard contextopslag in geheugen van Node-RED; configureer hiervoor geen opslag naar schijf. Home Assistant bewaakt daarnaast iedere laadopdracht opnieuw. Uitschakelen van de softwarematige loadbalancer schakelt de elektrische beveiligingen van de installatie vanzelfsprekend niet uit.
+
+Bij ingeschakelde loadbalancing blokkeert de centrale HEMS-schrijver een ongeldige laadruimtesensor op **0 A**, ook bij Manual. Hij controleert de onderliggende DSMR-waarden opnieuw vóór de opdracht, zodat hij niet afhankelijk is van een nog niet bijgewerkte gezondheidsstatus. De loadbalancersensor zelf geeft bij onbruikbare brongegevens eveneens 0 A. De bestaande watchdog gebruikt de foutreden voor de fail-safe en melding.
+
+Het spanningsbereik **180–260 V** is een bewust gekozen controle op bruikbare meetgegevens voor deze 230V-installatie; het vervangt geen elektrische netbeveiliging. De vijf seconden kloktolerantie is alleen bedoeld voor een kleine afwijking. De controle bewijst nog niet dat alle losse MQTT-velden uit hetzelfde telegram komen. Een gezonde heartbeat bewijst evenmin dat iedere HEMS-opdracht bevestigd is; die onafhankelijke uitvoeringsbewaking volgt in een aparte fase.
 
 ## Gezondheidsbewaking en harde fail-safe
 
@@ -86,7 +90,7 @@ De coördinator in Node-RED verwerkt verlagingen direct. Voor overige loadbalanc
 
 Home Assistant controleert iedere 5 seconden:
 
-- **DSMR-gezondheid:** `sensor.dsmr_reading_timestamp` mag niet ouder zijn dan 30 seconden en alle vereiste DSMR/P1-entiteiten moeten numeriek beschikbaar zijn;
+- **DSMR-gezondheid:** `sensor.dsmr_reading_timestamp` mag maximaal 30 seconden oud zijn en maximaal 5 seconden vooruitlopen. Alle vereiste DSMR/P1-entiteiten moeten eindige getallen zijn. Fasespanningen moeten binnen 180–260 V liggen; afzonderlijke afname en teruglevering per fase mogen niet negatief zijn. Nulverbruik en negatieve totale P1-nettovermogens zijn wel geldig;
 - **Node-RED-gezondheid:** de Master-flow schrijft iedere 10 seconden een heartbeat naar Home Assistant; deze mag niet ouder zijn dan 30 seconden.
 
 De actuele toestand is zichtbaar via onder andere:
@@ -271,7 +275,7 @@ De Master-trigger levert de sensorwaarde als `msg.payload`. De tests voeren de g
 ```sh
 node --test tests/bender-master-loadbalancer.test.cjs
 # Python-omgeving met PyYAML en Jinja2:
-python tests/test_bender_stop_safety.py
+python -m unittest discover -s tests -p 'test_*.py'
 ```
 
 De tests dekken berichtpieken, onmiddellijke verlagingen, annuleren van een wachtende verhoging, ontbrekende/ongeldige waarden, oude nulmetingen, fouten bij schrijven en de gemeten ongewenste 0 → 6 A-overgang. Ze vervangen geen fysieke laadtest of controle van HA's timers en de Modbus-terugmelding.

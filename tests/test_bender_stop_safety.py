@@ -52,7 +52,8 @@ class Harness:
             'sensor.bender_loadbalancer_available_current':'16','sensor.bender_hems_limit':'0',
             'input_number.bender_house_max_power':'5000','input_number.bender_loadbalancer_margin':'5000',
             'input_select.bender_failsafe_mode':'Actief','binary_sensor.bender_dsmr_data_healthy':'on',
-            'sensor.bender_totalpower':'0'}.items():self.states.set(e,v,changed=NOW-60)
+            'sensor.bender_totalpower':'0','sensor.p1_meter_power':'-256',
+            'sensor.dsmr_reading_timestamp':dt.datetime.fromtimestamp(NOW-1,dt.timezone.utc).isoformat()}.items():self.states.set(e,v,changed=NOW-60)
         for phase in [1,2,3]:
             self.states.set(f'sensor.bender_current_l{phase}','0',changed=NOW-60)
             self.states.set(f'sensor.dsmr_reading_phase_currently_delivered_l{phase}','0')
@@ -78,6 +79,11 @@ class Harness:
                     variables[k]=value
             elif 'if' in action:
                 self.sequence(action.get('then',[]) if self.conditions(action['if'],variables) else action.get('else',[]),variables)
+            elif 'choose' in action:
+                for option in action['choose']:
+                    if self.conditions(option['conditions'],variables):
+                        self.sequence(option['sequence'],variables);break
+                else:self.sequence(action.get('default',[]),variables)
             elif 'stop' in action:raise Stop()
             elif 'service' in action:
                 service=action['service'];data={k:self.render(v,variables) for k,v in action.get('data',{}).items()}
