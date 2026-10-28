@@ -127,7 +127,17 @@ In fail-safe-modus **Actief** controleert `Bender Onafhankelijke HEMS Bewaking` 
 
 Op **Instellingen → Data Actualiteit** zijn de opdrachtstatus, gevraagde stroom, teruggemelde stroom en gezondheid zichtbaar. Mogelijke statussen zijn `Bevestigd`, `Wacht op terugmelding`, `Geen actuele terugmelding` en `Opdracht niet bevestigd`.
 
-Dit bevestigt het HEMS-register; het bewijst op zichzelf geen fysieke uitschakeling van de contactor. Bij verlies van de volledige Modbus-verbinding kan HA geen stop garanderen. De bestaande controllerinstellingen voor communicatietimeout en Safe Current zijn in deze fase niet veranderd of fysiek als netwerkuitvaltest gevalideerd.
+Dit bevestigt het HEMS-register; het bewijst op zichzelf geen fysieke uitschakeling van de contactor. Bij verlies van de volledige Modbus-verbinding kan HA geen stop garanderen.
+
+### Controllerterugval en veilige weergave
+
+Op 28 oktober 2026 zijn bij de gebruikte controller (firmware 5.34) Safe Current (register 131) van 16 naar **0 A** en de communicatietimeout (register 132) van 1200 naar **60 seconden** gezet en teruggelezen. Dit zijn controllerinstellingen, geen waarden die de package automatisch instelt. De timeout wordt in HA alleen uitgelezen via `sensor.bender_modbus_timeout`.
+
+Tijdens twee onderbrekingen van uitsluitend Modbus TCP gedurende 90 seconden detecteerde HA de uitval en herstelde de besturing na een verse nul-terugmelding en de stabilisatieperiode. Ontvangst van de storings- en herstelpush is voor de eerste proef bevestigd. De tweede proef begon bij 6 A en circa 4,2 kW. Een fysieke stop vóór verbindingsherstel is **nog niet onafhankelijk bewezen**: de gebruiker observeerde HA en het algemene huisverbruik. Behoud van 0 A/60 seconden na een controllerherstart moet eveneens nog worden gecontroleerd.
+
+Het dashboard toont nu `Niet beschikbaar` voor het afgeleide laadvermogen, de laadactiviteit en de foutstatus als hun bronmetingen ontbreken of niet numeriek zijn. Bij ongezonde HEMS-terugmelding verschijnt bovendien een waarschuwing dat getoonde waarden oud kunnen zijn en een stopopdracht geen bewezen laadstop is. Een algemene P1-meting is met een thuisbatterij geen onafhankelijke laadmeting.
+
+Safe Current heeft afzonderlijke 0/6/10/16 A-knoppen met bevestiging. Het script accepteert uitsluitend 0 of gehele waarden van 6–16 A en controleert de gemelde losgekoppelde voertuigstatus, strategie Uit, nulvermogen en bevestigde HEMS 0 A. Dit is bediening van de terugvalstroom bij communicatieverlies, niet van de normale laadstroom. Hogere terugvalstromen kunnen laden zonder werkende loadbalancing toelaten.
 
 ### Pushberichten
 

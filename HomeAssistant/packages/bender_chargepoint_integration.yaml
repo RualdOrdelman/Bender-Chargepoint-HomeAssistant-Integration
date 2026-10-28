@@ -31,6 +31,14 @@ modbus:
         data_type: uint16
         unit_of_measurement: "A"
         scan_interval: 30
+      # Controller fallback timeout; read-only in HA, never rewritten periodically.
+      - name: "Bender_Modbus_Timeout"
+        slave: 1
+        address: 132
+        input_type: holding
+        data_type: uint16
+        unit_of_measurement: "s"
+        scan_interval: 30
       # Power per phase (R) - 32-bit registers
       - name: "Bender_Power_L1"
         slave: 1
@@ -533,6 +541,8 @@ template:
       # Error Code Translation - Converts bitmask to readable error messages
       - name: "Bender Error Status"
         unique_id: "bender_error_status"
+        availability: >
+          {{ is_number(states('sensor.bender_error_code')) }}
         icon: mdi:alert-circle
         state: >
           {% set code = states('sensor.bender_error_code') | int(0) %}
@@ -876,6 +886,8 @@ template:
       # Total current charging power
       - name: "Bender Charging Power Total"
         unique_id: "bender_charging_power_total"
+        availability: >
+          {{ is_number(states('sensor.bender_power_l1')) and is_number(states('sensor.bender_power_l2')) and is_number(states('sensor.bender_power_l3')) }}
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
@@ -889,6 +901,8 @@ template:
   - binary_sensor:
       - name: "Bender Charging Active"
         unique_id: "bender_charging_active"
+        availability: >
+          {{ is_number(states('sensor.bender_totalpower')) }}
         icon: mdi:ev-station
         device_class: power
         state: >
@@ -1064,7 +1078,24 @@ template:
 script:
   set_bender_safe_current:
     alias: "Set Bender Safe Current"
+    description: "Alleen bij losgekoppelde auto, strategie Uit en bevestigde nulstroom."
     sequence:
+      - if:
+          - condition: template
+            value_template: >
+              {{ not (is_number(current | default(none))
+                 and current | float == current | int
+                 and (current | int == 0 or 6 <= current | int <= 16)
+                 and is_state('input_select.bender_charging_strategy', 'Uit')
+                 and is_state('sensor.bender_vehicle_state', '1')
+                 and is_number(states('sensor.bender_hems_limit'))
+                 and states('sensor.bender_hems_limit') | float == 0
+                 and is_number(states('sensor.bender_totalpower'))
+                 and states('sensor.bender_totalpower') | float == 0
+                 and is_state('binary_sensor.bender_hems_command_confirmed', 'on')) }}
+        then:
+          - stop: "Safe Current niet gewijzigd: auto moet los zijn, strategie Uit en HEMS 0A bevestigd; geldige waarde is 0 of geheel 6–16A."
+            error: true
       - service: modbus.write_register
         data:
           hub: modbus_hub

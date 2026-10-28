@@ -179,6 +179,18 @@ views:
                           entity_id: input_select.bender_charging_strategy
                           option: "Dynamic"
 
+              # Missing Modbus data is not proof of a stopped charger.
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.bender_hems_control_healthy
+                    state_not: "on"
+                card:
+                  type: markdown
+                  content: >
+                    **Geen betrouwbare terugmelding van de laadpaal.**
+                    Waarden kunnen ontbreken of verouderd zijn.
+                    Een verstuurde stopopdracht bewijst nog niet dat de auto gestopt is.
+
               # --- STATUS ---
               - type: entities
                 title: "🔌 Status"
@@ -557,20 +569,39 @@ views:
                   **Berekening:**
                   `Zekering (25A) - Marge - (P1 Meter - Lader)`
                   
-                  De paal pakt vervolgens de **laagste waarde** van de drie fases (de bottleneck) en gebruikt die als limiet. Zo wordt je hoofdaansluiting nooit overbelast.
+                  De paal pakt vervolgens de **laagste waarde** van de drie fases (de bottleneck) en gebruikt die als limiet. Dit begrenst de laadopdracht zolang de meetgegevens en besturing werken; de installatiebeveiligingen blijven noodzakelijk.
 
               - type: entities
                 title: "🛡️ Safe Current (Fallback)"
                 entities:
                   - entity: sensor.bender_safecurrent
-                    name: Huidige Safe Current
+                    name: Terugvalstroom bij communicatieverlies
+                  - entity: sensor.bender_modbus_timeout
+                    name: Communicatietimeout
+              - type: markdown
+                content: >
+                  Dit zijn de instellingen voor **communicatieverlies**, niet de normale laadstroom.
+                  Wijzigen kan alleen met de auto losgekoppeld, strategie Uit en bevestigde 0 A.
+                  0 A is bedoeld om laden bij communicatieverlies te pauzeren.
+                  Behoud na een controllerherstart en de fysieke stop zijn nog te verifiëren.
               - type: horizontal-stack
                 cards:
+                  - type: button
+                    name: "0A"
+                    tap_action:
+                      action: call-service
+                      service: script.set_bender_safe_current
+                      confirmation:
+                        text: "Safe Current naar 0 A wijzigen? Dit is de terugvalstroom bij communicatieverlies. Laden hoort dan te pauzeren."
+                      data:
+                        current: 0
                   - type: button
                     name: "6A"
                     tap_action:
                       action: call-service
                       service: script.set_bender_safe_current
+                      confirmation:
+                        text: "Safe Current naar 6 A wijzigen? Dit is de terugvalstroom bij communicatieverlies. Zonder werkende loadbalancing kan de laadpaal dan blijven laden tot 6 A per fase."
                       data:
                         current: 6
                   - type: button
@@ -578,6 +609,8 @@ views:
                     tap_action:
                       action: call-service
                       service: script.set_bender_safe_current
+                      confirmation:
+                        text: "Safe Current naar 10 A wijzigen? Dit is de terugvalstroom bij communicatieverlies. Zonder werkende loadbalancing kan de laadpaal dan blijven laden tot 10 A per fase."
                       data:
                         current: 10
                   - type: button
@@ -585,6 +618,8 @@ views:
                     tap_action:
                       action: call-service
                       service: script.set_bender_safe_current
+                      confirmation:
+                        text: "Safe Current naar 16 A wijzigen? Dit is de terugvalstroom bij communicatieverlies. Zonder werkende loadbalancing kan de laadpaal dan blijven laden tot 16 A per fase."
                       data:
                         current: 16
 
