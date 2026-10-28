@@ -583,7 +583,7 @@ views:
                   Dit zijn de instellingen voor **communicatieverlies**, niet de normale laadstroom.
                   Wijzigen kan alleen met de auto losgekoppeld, strategie Uit en bevestigde 0 A.
                   0 A is bedoeld om laden bij communicatieverlies te pauzeren.
-                  0 A / 60 s bleef behouden bij de controllerherstart op 28-10-2026. De fysieke stop bij communicatieverlies is nog te verifiëren.
+                  0 A / 60 s bleef behouden bij de controllerherstart op 28-10-2026. Bij de 6 A-test stopte de auto zelfstandig na circa 75 s communicatieverlies, vóór verbindingsherstel (28-10-2026).
               - type: horizontal-stack
                 cards:
                   - type: button
