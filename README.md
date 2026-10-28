@@ -78,7 +78,7 @@ De loadbalancer berekent per fase hoeveel stroom beschikbaar is. Daarvoor combin
 
 De laagste beschikbare waarde van L1, L2 en L3 is bepalend. De uitkomst wordt op maximaal `16 A` begrensd. Minder dan `6 A` beschikbaar betekent een laadopdracht van `0 A`, omdat een EV normaal niet onder `6 A` kan laden.
 
-De coördinator in Node-RED reageert op wijzigingen van de loadbalancersensor en beperkt deze route tot maximaal één verwerking per 5 seconden. Home Assistant bewaakt daarnaast iedere laadopdracht opnieuw. Uitschakelen van de softwarematige loadbalancer schakelt de elektrische beveiligingen van de installatie vanzelfsprekend niet uit.
+De coördinator in Node-RED verwerkt verlagingen direct. Voor overige loadbalancerupdates bewaart hij maximaal één laatste bericht en verwerkt dit uiterlijk na 5 seconden. Er wordt geen FIFO-wachtrij opgebouwd. De tijdelijke timer gebruikt de standaard contextopslag in geheugen van Node-RED; configureer hiervoor geen opslag naar schijf. Home Assistant bewaakt daarnaast iedere laadopdracht opnieuw. Uitschakelen van de softwarematige loadbalancer schakelt de elektrische beveiligingen van de installatie vanzelfsprekend niet uit.
 
 ## Gezondheidsbewaking en harde fail-safe
 
@@ -249,6 +249,32 @@ Gebruik voor de eerste controle een moment waarop de auto niet actief laadt.
 7. Test `Uit` en daarna met toezicht een lage Manual-instelling.
 8. Test de overige strategieën pas nadat de basisbediening en begrenzing kloppen.
 9. Zet de fail-safe na de gecontroleerde test op `Actief`.
+
+## Direct: veilig stoppen en hervatten
+
+Bij een stop zet HA `input_number.bender_commanded_current` vóór de Modbus-opdracht op nul. De loadbalancer telt dan geen oude laadstroom meer terug als beschikbare ruimte. Tijdens laden wordt deze verrekening begrensd op de laatst gestuurde stroom. Dit voorkomt dat een snelle P1-update en een nog oude Modbus-meting na het stoppen tijdelijk fictieve laadruimte opleveren.
+
+Direct hervat pas als:
+
+- HEMS 0 A, alle fasestromen maximaal 200 mA en laadvermogen maximaal 50 W rapporteren;
+- deze rapportages na de stop zijn ontvangen en nog actueel zijn (stroom/vermogen maximaal 25 seconden oud, HEMS maximaal 45 seconden);
+- daarna gedurende 30 seconden onafgebroken minimaal 6 A beschikbaar is en de besturing gezond blijft.
+
+De controles staan in `binary_sensor.bender_charger_stopped_fresh` en `binary_sensor.bender_direct_resume_ready`. Een periodieke Direct-controle iedere 5 seconden zorgt ook bij een gelijkblijvende loadbalancerwaarde voor hervatten. De eerste start van Direct gebruikt dezelfde controle. Een HA-herstart begint conservatief met laatst gevraagde stroom 0 A. De versheidscontrole gebruikt `State.last_reported` (gevalideerd op HA 2026.10.4), zodat ook ongewijzigde nulmetingen kunnen bevestigen dat de controller wordt uitgelezen.
+
+De centrale HEMS-schrijver controleert de Direct-voorwaarden opnieuw, begrenst opdrachten op 0 of 6–16 A en slaat al bevestigde opdrachten over. Een nieuwe stop kan een oudere scriptuitvoering onderbreken. Manual behoudt zijn expliciete bediening; de wachttijd geldt voor Direct. ChargePV en Dynamic zijn hiermee niet functioneel gevalideerd.
+
+## Lokale regressietests
+
+De Master-trigger levert de sensorwaarde als `msg.payload`. De tests voeren de geëxporteerde Master-functie uit met een gesimuleerde klok en toetsen de echte HA-templates en volgorde van scriptacties. Ze openen geen verbinding met HA of de laadpaal.
+
+```sh
+node --test tests/bender-master-loadbalancer.test.cjs
+# Python-omgeving met PyYAML en Jinja2:
+python tests/test_bender_stop_safety.py
+```
+
+De tests dekken berichtpieken, onmiddellijke verlagingen, annuleren van een wachtende verhoging, ontbrekende/ongeldige waarden, oude nulmetingen, fouten bij schrijven en de gemeten ongewenste 0 → 6 A-overgang. Ze vervangen geen fysieke laadtest of controle van HA's timers en de Modbus-terugmelding.
 
 ## Gecontroleerd testen van de fail-safe
 

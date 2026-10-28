@@ -4,7 +4,7 @@
         "type": "tab",
         "label": "Bender Strategy Direct",
         "disabled": false,
-        "info": "Direct strategy: Immediate charging at max power.\nHEMS is dynamically updated by the master flow on every LB sensor change.\nThe HA script bender_start_charging sets both the HEMS and the status text."
+        "info": "Direct: HA guards restart with confirmed fresh standstill and 30s stable headroom. Master handles changes; a 5s retry covers unchanged values and reconnection."
     },
     {
         "id": "bender_direct_group",
@@ -65,6 +65,58 @@
         "x": 240,
         "y": 80,
         "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bender_direct_retry",
+        "type": "inject",
+        "z": "bender_strategy_direct_tab",
+        "name": "Recheck Direct every 5s",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "5",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 2,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 160,
+        "y": 180,
+        "wires": [
+            [
+                "bender_direct_is_active"
+            ]
+        ]
+    },
+    {
+        "id": "bender_direct_is_active",
+        "type": "api-current-state",
+        "z": "bender_strategy_direct_tab",
+        "name": "Direct still selected?",
+        "server": "b9d10367867e38e6",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "Direct",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "input_select.bender_charging_strategy",
+        "state_type": "str",
+        "blockInputOverrides": true,
+        "outputProperties": [],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "x": 410,
+        "y": 180,
+        "wires": [
+            [
+                "bender_direct_start"
+            ],
             []
         ]
     }

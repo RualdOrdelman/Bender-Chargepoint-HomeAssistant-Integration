@@ -166,6 +166,17 @@ modbus:
 ###########################################################################################################
 input_number:
 
+  # Last successful positive command; a stop is recorded BEFORE the write.
+  # Start conservatively after HA restarts, even if the controller retained 16A.
+  bender_commanded_current:
+    name: Laadpaal laatst gevraagde stroom
+    min: 0
+    max: 16
+    step: 1
+    initial: 0
+    unit_of_measurement: "A"
+    mode: box
+
   bender_strategy_required_kwh:
     name: Benodigde energie
     min: 0
@@ -533,7 +544,7 @@ template:
         device_class: power
         state: >
           {% set p1_l1 = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
-          {% set ch_l1_ma = states('sensor.bender_current_l1') | float(0) %}
+          {% set ch_l1_ma = [[states('sensor.bender_current_l1') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
           {% set ch_l1_w = (ch_l1_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
           {{ (p1_l1 - ch_l1_w) | round(0) }}
 
@@ -543,7 +554,7 @@ template:
         device_class: power
         state: >
           {% set p1_l2 = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
-          {% set ch_l2_ma = states('sensor.bender_current_l2') | float(0) %}
+          {% set ch_l2_ma = [[states('sensor.bender_current_l2') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
           {% set ch_l2_w = (ch_l2_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
           {{ (p1_l2 - ch_l2_w) | round(0) }}
 
@@ -553,11 +564,13 @@ template:
         device_class: power
         state: >
           {% set p1_l3 = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
-          {% set ch_l3_ma = states('sensor.bender_current_l3') | float(0) %}
+          {% set ch_l3_ma = [[states('sensor.bender_current_l3') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
           {% set ch_l3_w = (ch_l3_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
           {{ (p1_l3 - ch_l3_w) | round(0) }}
 
       # Available Current per phase (Bottleneck Calculation)
+      # Credit is capped at the last command, and becomes zero BEFORE a stop
+      # write. Old 10s Modbus readings must not create fictitious restart room.
       # Calculates available amps for each phase: (Max - Margin - (Grid - Charger))
       # Returns the minimum available amps across all 3 phases (capped at 16A)
       - name: "Bender Loadbalancer Available Current"
@@ -583,7 +596,7 @@ template:
             {% set v_l1 = states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
             {% set grid_l1_w = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
             {% set grid_l1_a = grid_l1_w / v_l1 %}
-            {% set ch_l1_ma = states('sensor.bender_current_l1') | float(0) %}
+            {% set ch_l1_ma = [[states('sensor.bender_current_l1') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
             {% set ch_l1_a = ch_l1_ma / 1000 %}
             {# Available = Limit - (Grid load without charger) = Limit - (Grid - Charger) #}
             {% set avail_l1 = limit_amps - grid_l1_a + ch_l1_a %}
@@ -592,7 +605,7 @@ template:
             {% set v_l2 = states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
             {% set grid_l2_w = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
             {% set grid_l2_a = grid_l2_w / v_l2 %}
-            {% set ch_l2_ma = states('sensor.bender_current_l2') | float(0) %}
+            {% set ch_l2_ma = [[states('sensor.bender_current_l2') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
             {% set ch_l2_a = ch_l2_ma / 1000 %}
             {% set avail_l2 = limit_amps - grid_l2_a + ch_l2_a %}
             
@@ -600,7 +613,7 @@ template:
             {% set v_l3 = states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
             {% set grid_l3_w = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
             {% set grid_l3_a = grid_l3_w / v_l3 %}
-            {% set ch_l3_ma = states('sensor.bender_current_l3') | float(0) %}
+            {% set ch_l3_ma = [[states('sensor.bender_current_l3') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
             {% set ch_l3_a = ch_l3_ma / 1000 %}
             {% set avail_l3 = limit_amps - grid_l3_a + ch_l3_a %}
             
@@ -626,7 +639,7 @@ template:
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
             {% set grid_l1_w = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
             {% set grid_l1_a = grid_l1_w / states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
-            {% set ch_l1_a = states('sensor.bender_current_l1') | float(0) / 1000 %}
+            {% set ch_l1_a = [[states('sensor.bender_current_l1') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max / 1000 %}
             {{ (limit_amps - grid_l1_a + ch_l1_a) | round(1) }}
           {% else %}
             16.0
@@ -643,7 +656,7 @@ template:
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
             {% set grid_l2_w = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
             {% set grid_l2_a = grid_l2_w / states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
-            {% set ch_l2_a = states('sensor.bender_current_l2') | float(0) / 1000 %}
+            {% set ch_l2_a = [[states('sensor.bender_current_l2') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max / 1000 %}
             {{ (limit_amps - grid_l2_a + ch_l2_a) | round(1) }}
           {% else %}
             16.0
@@ -660,7 +673,7 @@ template:
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
             {% set grid_l3_w = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
             {% set grid_l3_a = grid_l3_w / states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
-            {% set ch_l3_a = states('sensor.bender_current_l3') | float(0) / 1000 %}
+            {% set ch_l3_a = [[states('sensor.bender_current_l3') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max / 1000 %}
             {{ (limit_amps - grid_l3_a + ch_l3_a) | round(1) }}
           {% else %}
             16.0
@@ -879,6 +892,68 @@ template:
              and is_state('binary_sensor.bender_nodered_heartbeat_healthy', 'on')
              and is_state('input_boolean.bender_failsafe_active', 'off') }}
 
+  # Poll report timestamps as well as state changes: unchanged zero readings
+  # are still fresh. State.last_reported is available in HA 2026.10.
+  - triggers:
+      - trigger: time_pattern
+        seconds: "/5"
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.bender_commanded_current
+          - sensor.bender_current_l1
+          - sensor.bender_current_l2
+          - sensor.bender_current_l3
+          - sensor.bender_hems_limit
+          - sensor.bender_totalpower
+    binary_sensor:
+      - name: "Bender Charger Stopped Fresh"
+        unique_id: "bender_charger_stopped_fresh"
+        state: >
+          {% set cmd = states.input_number.bender_commanded_current %}
+          {% set stopped_at = as_timestamp(cmd.last_changed, 0) %}
+          {% set timestamp = as_timestamp(now()) %}
+          {% set ns = namespace(ok=is_state('input_number.bender_commanded_current', '0.0')
+              or is_state('input_number.bender_commanded_current', '0')) %}
+          {% set limits = {
+            'sensor.bender_current_l1': [200, 25],
+            'sensor.bender_current_l2': [200, 25],
+            'sensor.bender_current_l3': [200, 25],
+            'sensor.bender_totalpower': [50, 25],
+            'sensor.bender_hems_limit': [0, 45]
+          } %}
+          {% set readings = expand(limits.keys() | list) %}
+          {% if readings | count != limits | count or stopped_at <= 0 %}
+            {% set ns.ok = false %}
+          {% endif %}
+          {% for reading in readings %}
+            {% set reported = as_timestamp(reading.last_reported, 0) %}
+            {% set age = timestamp - reported %}
+            {% if not is_number(reading.state)
+                or reading.state | float(-1) < 0
+                or reading.state | float(999999) > limits[reading.entity_id][0]
+                or reported < stopped_at or age < 0 or age > limits[reading.entity_id][1] %}
+              {% set ns.ok = false %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+  # State-based delay_on deliberately resets on any loss of readiness. A
+  # separate periodic Direct check starts charging even if LB stays unchanged.
+  - binary_sensor:
+      - name: "Bender Direct Resume Ready"
+        unique_id: "bender_direct_resume_ready"
+        delay_on: "00:00:30"
+        state: >
+          {{ is_state('input_select.bender_charging_strategy', 'Direct')
+             and states('input_number.bender_commanded_current') | float(-1) == 0
+             and is_state('binary_sensor.bender_charger_stopped_fresh', 'on')
+             and is_state('binary_sensor.bender_charging_control_healthy', 'on')
+             and is_number(states('sensor.bender_loadbalancer_available_current'))
+             and states('sensor.bender_loadbalancer_available_current') | float(0) >= 6
+             and states('input_number.bender_strategy_max_current') | float(0) >= 6 }}
+
 ###########################################################################################################
 # SCRIPTS
 ###########################################################################################################
@@ -896,18 +971,60 @@ script:
   set_bender_hems_limit:
     alias: "Set Bender HEMS Limit"
     icon: mdi:home-lightning-bolt
-    mode: single
-    max_exceeded: silent
+    # A new stop cancels an older run instead of being silently discarded.
+    # Direct positive writes are rechecked here, immediately before Modbus.
+    mode: restart
     fields:
       current:
-        description: "HEMS Limit in Ampère (0-32A)"
+        description: "HEMS Limit in Ampère (0 of 6-16A)"
         example: "16"
     sequence:
       - variables:
-          requested_current: "{{ [[current | int(0), 0] | max, 32] | min }}"
-          failsafe_active: "{{ is_state('input_boolean.bender_failsafe_active', 'on') }}"
+          requested_current: "{{ [[current | int(0), 0] | max, 16] | min }}"
+          previous_command: "{{ states('input_number.bender_commanded_current') | int(0) }}"
           applied_current: >
-            {{ 0 if failsafe_active and requested_current | int(0) > 0 else requested_current | int(0) }}
+            {% set requested = requested_current | int(0) %}
+            {% set direct = is_state('input_select.bender_charging_strategy', 'Direct') %}
+            {% set resume = is_state('binary_sensor.bender_direct_resume_ready', 'on')
+                and is_state('binary_sensor.bender_charger_stopped_fresh', 'on')
+                and as_timestamp(states.binary_sensor.bender_direct_resume_ready.last_changed, 0)
+                    >= as_timestamp(states.input_number.bender_commanded_current.last_changed, 0) %}
+            {% if requested < 6
+                or is_state('input_select.bender_charging_strategy', 'Uit')
+                or is_state('input_boolean.bender_failsafe_active', 'on')
+                or (direct and not is_state('binary_sensor.bender_charging_control_healthy', 'on'))
+                or (direct and previous_command | int(0) == 0 and not resume) %}
+              0
+            {% elif direct and is_state('input_boolean.bender_loadbalancer_enabled', 'on') and not is_number(states('sensor.bender_loadbalancer_available_current')) %}
+              0
+            {% elif direct and is_state('input_boolean.bender_loadbalancer_enabled', 'on') %}
+              {% set allowed = [requested, states('sensor.bender_loadbalancer_available_current') | float(0)] | min | int %}
+              {{ allowed if allowed >= 6 else 0 }}
+            {% else %}
+              {{ requested }}
+            {% endif %}
+
+      # Do not rewrite/log an already confirmed command on every refresh.
+      - if:
+          - condition: template
+            value_template: >
+              {{ previous_command | int(0) == applied_current | int(0)
+                 and is_number(states('sensor.bender_hems_limit'))
+                 and states('sensor.bender_hems_limit') | int(-1) == applied_current | int(0) }}
+        then:
+          - stop: "HEMS-opdracht is al bevestigd"
+
+      # Suppress old charger-current credit BEFORE sending zero. Repeated zero
+      # commands do not reset last_changed, so the fresh-data wait can finish.
+      - if:
+          - condition: template
+            value_template: "{{ applied_current | int(0) == 0 }}"
+        then:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.bender_commanded_current
+            data:
+              value: 0
 
       - service: modbus.write_register
         data:
@@ -915,6 +1032,17 @@ script:
           slave: 1
           address: 1000
           value: "{{ applied_current }}"
+
+      # Positive credit is enabled only after the Modbus service succeeds.
+      - if:
+          - condition: template
+            value_template: "{{ applied_current | int(0) >= 6 }}"
+        then:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.bender_commanded_current
+            data:
+              value: "{{ applied_current }}"
 
       # ---- Logging: leg vast waarom de limiet op dit moment werd ingesteld ----
       - variables:
@@ -938,7 +1066,7 @@ script:
         data:
           name: "HEMS Limiet Ingesteld"
           message: >
-            → {{ applied_current }}A{% if _blocked %} ({{ requested_current }}A geblokkeerd door fail-safe){% endif %} |
+            → {{ applied_current }}A{% if _blocked %} ({{ requested_current }}A geblokkeerd door beveiliging){% endif %} |
             LB: {{ _lb }}A (L1:{{ _lb_l1 }} L2:{{ _lb_l2 }} L3:{{ _lb_l3 }}) |
             Grid L1:{{ _g_l1 }}W L2:{{ _g_l2 }}W L3:{{ _g_l3 }}W |
             Laadpaal L1:{{ _ch_l1 }}A L2:{{ _ch_l2 }}A L3:{{ _ch_l3 }}A |
@@ -950,7 +1078,7 @@ script:
           entity_id: input_text.bender_hems_change_context
         data:
           value: >
-            {{ now().strftime('%H:%M:%S') }} →{{ applied_current }}A{% if _blocked %} FAILSAFE({{ requested_current }}A geblokkeerd){% endif %} LB:{{ _lb }}A ({{ _lb_l1 }}/{{ _lb_l2 }}/{{ _lb_l3 }}) Grid:{{ _g_l1 }}/{{ _g_l2 }}/{{ _g_l3 }}W Ch:{{ _ch_l1 }}/{{ _ch_l2 }}/{{ _ch_l3 }}A DSMR:{{ _dsmr }}s
+            {{ now().strftime('%H:%M:%S') }} →{{ applied_current }}A{% if _blocked %} BEVEILIGING({{ requested_current }}A geblokkeerd){% endif %} LB:{{ _lb }}A ({{ _lb_l1 }}/{{ _lb_l2 }}/{{ _lb_l3 }}) Grid:{{ _g_l1 }}/{{ _g_l2 }}/{{ _g_l3 }}W Ch:{{ _ch_l1 }}/{{ _ch_l2 }}/{{ _ch_l3 }}A DSMR:{{ _dsmr }}s
 
   bender_start_charging:
     alias: "Bender Start Laden (Max)"
@@ -960,7 +1088,7 @@ script:
       - variables:
           max_config: "{{ states('input_number.bender_strategy_max_current') | int(16) }}"
           lb_enabled: "{{ is_state('input_boolean.bender_loadbalancer_enabled', 'on') }}"
-          lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(16) }}"
+          lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(0) if is_number(states('sensor.bender_loadbalancer_available_current')) else 0 }}"
           
           # Calculate final current:
           # If LB enabled: min(max_config, lb_limit, 16)
@@ -972,7 +1100,12 @@ script:
             {% else %}
               {% set val = [max_config, limit] | min | int %}
             {% endif %}
-            {{ 0 if val < 6 else val }}
+            {% set stopped = states('input_number.bender_commanded_current') | int(0) == 0 %}
+            {{ 0 if val < 6
+                 or not is_state('input_select.bender_charging_strategy', 'Direct')
+                 or not is_state('binary_sensor.bender_charging_control_healthy', 'on')
+                 or (stopped and not is_state('binary_sensor.bender_direct_resume_ready', 'on'))
+               else val }}
 
       - service: script.set_bender_hems_limit
         data:
@@ -985,7 +1118,12 @@ script:
             {% if is_state('input_boolean.bender_failsafe_active', 'on') %}
               Fail-safe actief: {{ states('input_text.bender_failsafe_reason') }}
             {% else %}
-              Laden op {{ final_current }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})
+              {% set commanded = states('input_number.bender_commanded_current') | int(0) %}
+              {% if commanded == 0 and lb_limit | float(0) >= 6 %}
+                Direct wacht op bevestigde stilstand en 30s stabiele laadruimte
+              {% else %}
+                Laden op {{ commanded }}A (LB: {{ 'Aan' if lb_enabled else 'Uit' }})
+              {% endif %}
             {% endif %}
 
   bender_stop_charging:
@@ -1400,7 +1538,7 @@ automation:
         {{ states('sensor.bender_hems_limit') not in ['unknown', 'unavailable'] }}
       current_hems: "{{ states('sensor.bender_hems_limit') | int(0) }}"
       lb_enabled: "{{ is_state('input_boolean.bender_loadbalancer_enabled', 'on') }}"
-      lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(0) }}"
+      lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(0) if is_number(states('sensor.bender_loadbalancer_available_current')) else 0 }}"
       safe_current: >
         {% if lb_enabled %}
           {{ [previous_hems, lb_limit, 16] | min | int }}

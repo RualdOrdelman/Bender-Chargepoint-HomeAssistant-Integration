@@ -187,7 +187,14 @@
         "ignorePrevStateUnavailable": false,
         "ignoreCurrentStateUnknown": false,
         "ignoreCurrentStateUnavailable": false,
-        "outputProperties": [],
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "string",
+                "valueType": "entityState"
+            }
+        ],
         "x": 130,
         "y": 200,
         "wires": [
@@ -226,27 +233,25 @@
     },
     {
         "id": "bender_master_lb_rate_limit",
-        "type": "delay",
         "z": "bender_strategy_master",
         "g": "bender_master_group",
-        "name": "Rate limit 5s",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "5",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
         "x": 510,
         "y": 200,
+        "type": "function",
+        "name": "Latest refresh; reductions first",
+        "func": "// Runtime timers use the default in-memory context store (Node-RED default).\nconst state = context.get(\"benderThrottle\") || {};\ncontext.set(\"benderThrottle\", state);\n// At most one pending refresh. Requests carry no remembered current command.\n// Reductions bypass throttling; <6A or invalid data takes the dedicated stop path.\nconst valid = msg.payload !== null && String(msg.payload).trim() !== \"\" && Number.isFinite(Number(msg.payload));\nconst value = valid ? Number(msg.payload) : 0;\nconst limit = value >= 6 ? Math.min(16, Math.floor(value)) : 0;\nconst previous = state.limit;\nconst emit = (message, stop) => {\n    state.sentAt = Date.now();\n    node.status({fill: \"green\", shape: \"dot\", text: \"0 pending\"});\n    node.send(stop ? [null, message] : [message, null]);\n};\nconst cancel = () => {\n    if (state.timer) clearTimeout(state.timer);\n    state.timer = null;\n    state.pending = null;\n};\nstate.limit = limit;\nif (previous === undefined || limit < previous || !valid) {\n    cancel();\n    emit(msg, limit === 0);\n    return null;\n}\nif (limit === 0) { cancel(); return null; }\nstate.pending = msg;\nconst remaining = 5000 - (Date.now() - state.sentAt);\nif (remaining <= 0) {\n    cancel();\n    emit(msg, false);\n} else if (!state.timer) {\n    node.status({fill: \"blue\", shape: \"dot\", text: \"1 pending\"});\n    state.timer = setTimeout(() => {\n        const latest = state.pending;\n        state.pending = null;\n        state.timer = null;\n        if (latest) emit(latest, false);\n    }, remaining);\n}\nreturn null;",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "context.set(\"benderThrottle\", {});",
+        "finalize": "const state = context.get(\"benderThrottle\");\nif (state && state.timer) clearTimeout(state.timer);\ncontext.set(\"benderThrottle\", undefined);",
+        "libs": [],
         "wires": [
             [
                 "bender_master_fetch_strategy"
+            ],
+            [
+                "bender_master_link_uit"
             ]
         ]
     },
