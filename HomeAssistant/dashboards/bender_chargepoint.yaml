@@ -299,8 +299,20 @@ views:
                     name: Actieve Limiet
                     icon: mdi:speedometer
 
+              - type: conditional
+                conditions:
+                  - entity: input_select.bender_charging_strategy
+                    state: "Manual"
+                card:
+                  type: markdown
+                  content: >
+                    **Jouw Manual-keuze: {{ states('input_number.bender_manual_desired_current') | int(0) }} A**
+                    (0 A = handmatige pauze). Tijdelijke begrenzing bewaart jouw keuze.
+                    Hervatten begint op 6 A; daarna maximaal 1 A per stap na bevestigde metingen
+                    en 30 seconden stabiele ruimte. Pauze blijft staan totdat je opnieuw een stroom kiest.
+
               # --- MANUAL HEMS CONTROL (alleen zichtbaar in Manual mode) ---
-              # Uses bender_set_charging_current which respects the Load Balancer limit
+              # Manual buttons write persistent intent; automatic limiting never changes it.
               - type: conditional
                 conditions:
                   - entity: input_select.bender_charging_strategy
@@ -318,7 +330,7 @@ views:
                       card_mod:
                         style: |
                           ha-card {
-                            {% if states('sensor.bender_hems_limit') | int(0) == 0 %}
+                            {% if states('input_number.bender_manual_desired_current') | int(0) == 0 %}
                             background-color: rgba(255, 152, 0, 0.2);
                             border: 1px solid rgba(255, 152, 0, 0.5);
                             {% endif %}
@@ -328,7 +340,7 @@ views:
                       icon: mdi:current-ac
                       tap_action:
                         action: call-service
-                        service: script.bender_set_charging_current
+                        service: script.bender_manual_set_current
                         data:
                           current: 6
                     - type: button
@@ -336,7 +348,7 @@ views:
                       icon: mdi:current-ac
                       tap_action:
                         action: call-service
-                        service: script.bender_set_charging_current
+                        service: script.bender_manual_set_current
                         data:
                           current: 10
                     - type: button
@@ -344,7 +356,7 @@ views:
                       icon: mdi:current-ac
                       tap_action:
                         action: call-service
-                        service: script.bender_set_charging_current
+                        service: script.bender_manual_set_current
                         data:
                           current: 16
 

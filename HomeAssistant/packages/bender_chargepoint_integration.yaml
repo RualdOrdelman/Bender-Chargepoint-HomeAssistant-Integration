@@ -174,6 +174,16 @@ modbus:
 ###########################################################################################################
 input_number:
 
+  # User intent only: restored after HA restart; absent/new helper defaults to 0.
+  # Automatic clamps and fail-safe stops must never change this value.
+  bender_manual_desired_current:
+    name: Manual gekozen laadstroom (0 = pauze)
+    min: 0
+    max: 16
+    step: 1
+    unit_of_measurement: "A"
+    mode: box
+
   # Guarded demand, recorded before attempting Modbus; never edit these helpers manually.
   bender_requested_current:
     name: Laadpaal bewaakte opdracht
@@ -223,7 +233,7 @@ input_number:
     icon: mdi:current-ac
     mode: slider
 
-  # Persistent snapshot used to restore Manual after a hard fail-safe.
+  # Diagnostic snapshot of the HEMS limit before a hard fail-safe (not user intent).
   # No initial value: Home Assistant restores the last stored value.
   bender_failsafe_previous_hems:
     name: HEMS-limiet voor fail-safe
@@ -364,10 +374,6 @@ input_boolean:
   bender_failsafe_notifications_enabled:
     name: Laadpaal fail-safe pushmeldingen
     icon: mdi:bell-alert
-
-  bender_failsafe_manual_restore_pending:
-    name: Manual herstel wacht op laadruimte
-    icon: mdi:restart-alert
 
 ###########################################################################################################
 # TIMER
@@ -524,18 +530,19 @@ template:
           {% set minutes = ((secs % 3600) // 60) %}
           {{ hours }}:{{ '%02d' | format(minutes) }}
 
-      # EV Battery SOC - Filters 65535 (unavailable) value
+      # EV Battery SOC - Missing/invalid values (including 65535) stay unknown.
+      # Numeric template sensors require a number or none, not the text "unknown".
       - name: "Bender EV SOC"
         unique_id: "bender_ev_soc"
         icon: mdi:car-battery
         unit_of_measurement: "%"
         device_class: battery
         state: >
-          {% set raw = states('sensor.bender_ev_battery_soc') | int(65535) %}
-          {% if raw == 65535 or raw > 100 %}
-            unknown
+          {% set raw = states('sensor.bender_ev_battery_soc') %}
+          {% if is_number(raw) and 0 <= (raw | float) <= 100 %}
+            {{ raw | float }}
           {% else %}
-            {{ raw }}
+            {{ none }}
           {% endif %}
 
       # Error Code Translation - Converts bitmask to readable error messages
@@ -1072,6 +1079,80 @@ template:
              and states('sensor.bender_loadbalancer_available_current') | float(0) >= 6
              and states('input_number.bender_strategy_max_current') | float(0) >= 6 }}
 
+  # Fresh reports after the previous command; five seconds false after a command,
+  # intent or ceiling change resets the subsequent continuous delay_on window.
+  - triggers:
+      - trigger: time_pattern
+        seconds: "/5"
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.bender_commanded_current
+          - input_number.bender_requested_current
+          - input_number.bender_manual_desired_current
+          - input_number.bender_strategy_max_current
+          - sensor.bender_hems_limit
+          - sensor.bender_totalpower
+          - sensor.bender_current_l1
+          - sensor.bender_current_l2
+          - sensor.bender_current_l3
+    binary_sensor:
+      - name: "Bender Manual Feedback Fresh"
+        unique_id: bender_manual_feedback_fresh
+        state: >
+          {% set cmd = states('input_number.bender_commanded_current') %}
+          {% set requested = states('input_number.bender_requested_current') %}
+          {% set changed = as_timestamp(states.input_number.bender_commanded_current.last_changed, 0) %}
+          {% set requested_at = as_timestamp(states.input_number.bender_requested_current.last_changed, 0) %}
+          {% set intent_at = as_timestamp(states.input_number.bender_manual_desired_current.last_changed, 0) %}
+          {% set ceiling_at = as_timestamp(states.input_number.bender_strategy_max_current.last_changed, 0) %}
+          {% set timestamp = as_timestamp(now()) %}
+          {% set ns = namespace(ok=is_number(cmd) and is_number(requested)
+              and cmd | float == requested | float and cmd | float == cmd | int
+              and (cmd | int == 0 or 6 <= cmd | int <= 16)
+              and timestamp - ([changed, intent_at, ceiling_at] | max) >= 5) %}
+          {% set limits = {'sensor.bender_current_l1': 25, 'sensor.bender_current_l2': 25,
+              'sensor.bender_current_l3': 25, 'sensor.bender_totalpower': 25, 'sensor.bender_hems_limit': 45} %}
+          {% set readings = expand(limits.keys() | list) %}
+          {% if readings | count != limits | count or changed <= 0 or intent_at <= 0 or ceiling_at <= 0 %}
+            {% set ns.ok = false %}
+          {% endif %}
+          {% for reading in readings %}
+            {% set reported = as_timestamp(reading.last_reported, 0) %}
+            {% if not is_number(reading.state) or reading.state | float(-1) < 0
+                or reported < changed or timestamp - reported < 0 or timestamp - reported > limits[reading.entity_id] %}
+              {% set ns.ok = false %}
+            {% elif reading.entity_id == 'sensor.bender_hems_limit' %}
+              {% if reading.state | float != cmd | float or reported < requested_at %}{% set ns.ok = false %}{% endif %}
+            {% elif 'sensor.bender_current_l' in reading.entity_id %}
+              {% if reading.state | float > (200 if cmd | int == 0 else (cmd | int + 1) * 1000) %}{% set ns.ok = false %}{% endif %}
+            {% elif cmd | int == 0 and reading.state | float > 50 %}
+              {% set ns.ok = false %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+  - binary_sensor:
+      - name: "Bender Manual Increase Ready"
+        unique_id: bender_manual_increase_ready
+        delay_on: "00:00:30"
+        state: >
+          {% set desired = states('input_number.bender_manual_desired_current') %}
+          {% set cmd = states('input_number.bender_commanded_current') | int(0) %}
+          {% set next_step = 6 if cmd < 6 else cmd + 1 %}
+          {% set maximum = states('input_number.bender_strategy_max_current') %}
+          {% set lb = states('sensor.bender_loadbalancer_available_current') %}
+          {{ is_state('input_select.bender_charging_strategy', 'Manual')
+             and is_number(desired) and desired | float == desired | int
+             and 6 <= desired | int <= 16 and desired | int >= next_step
+             and is_number(maximum) and maximum | float >= next_step
+             and is_state('binary_sensor.bender_manual_feedback_fresh', 'on')
+             and is_state('binary_sensor.bender_charging_control_healthy', 'on')
+             and is_state('binary_sensor.bender_hems_command_confirmed', 'on')
+             and (is_state('input_boolean.bender_loadbalancer_enabled', 'off')
+               or (is_number(lb) and lb | float >= next_step)) }}
+
 ###########################################################################################################
 # SCRIPTS
 ###########################################################################################################
@@ -1103,18 +1184,39 @@ script:
           address: 131
           value: "{{ current | int }}"
 
+  bender_write_hems_zero:
+    alias: "Bender HEMS Nulopdracht Uitvoeren"
+    description: "Interne stop-schrijver; uitsluitend via de bewaakte HEMS-regeling aanroepen."
+    mode: single
+    max_exceeded: silent
+    sequence:
+      - service: modbus.write_register
+        data:
+          hub: modbus_hub
+          slave: 1
+          address: 1000
+          value: 0
+
   set_bender_hems_limit:
     alias: "Set Bender HEMS Limit"
     icon: mdi:home-lightning-bolt
-    # A new stop cancels an older run instead of being silently discarded.
-    # Direct positive writes are rechecked here, immediately before Modbus.
+    # A new stop preempts an older positive run. Zero I/O runs independently in
+    # bender_write_hems_zero (single): duplicate stops never cancel an active zero.
+    # Direct/Manual safety is rechecked before writing; no positive FIFO queue.
     mode: restart
     fields:
       current:
         description: "HEMS Limit in Ampère (0 of 6-16A)"
         example: "16"
     sequence:
+      - if:
+          - condition: template
+            value_template: "{{ expected_strategy | default('') != '' and not is_state('input_select.bender_charging_strategy', expected_strategy) }}"
+        then:
+          - stop: "Verouderde opdracht van een andere strategie"
       - variables:
+          strategy_at: "{{ as_timestamp(states.input_select.bender_charging_strategy.last_changed, 0) }}"
+          manual_intent_at: "{{ as_timestamp(states.input_number.bender_manual_desired_current.last_changed, 0) }}"
           requested_current: "{{ [[current | int(0), 0] | max, 16] | min }}"
           previous_command: "{{ states('input_number.bender_commanded_current') | int(0) }}"
           ack_target: '{{ states(''input_number.bender_requested_current'') | float(-1) }}'
@@ -1157,8 +1259,63 @@ script:
               {% endif %}
             {% endfor %}
             {{ ns.valid }}
+          manual_feedback_fresh: >
+            {% set cmd = states('input_number.bender_commanded_current') %}
+            {% set requested = states('input_number.bender_requested_current') %}
+            {% set changed = as_timestamp(states.input_number.bender_commanded_current.last_changed, 0) %}
+            {% set requested_at = as_timestamp(states.input_number.bender_requested_current.last_changed, 0) %}
+            {% set intent_at = as_timestamp(states.input_number.bender_manual_desired_current.last_changed, 0) %}
+            {% set ceiling_at = as_timestamp(states.input_number.bender_strategy_max_current.last_changed, 0) %}
+            {% set timestamp = as_timestamp(now()) %}
+            {% set ns = namespace(ok=is_number(cmd) and is_number(requested)
+                and cmd | float == requested | float and cmd | float == cmd | int
+                and (cmd | int == 0 or 6 <= cmd | int <= 16)
+                and timestamp - ([changed, intent_at, ceiling_at] | max) >= 5) %}
+            {% set limits = {'sensor.bender_current_l1': 25, 'sensor.bender_current_l2': 25,
+                'sensor.bender_current_l3': 25, 'sensor.bender_totalpower': 25, 'sensor.bender_hems_limit': 45} %}
+            {% set readings = expand(limits.keys() | list) %}
+            {% if readings | count != limits | count or changed <= 0 or intent_at <= 0 or ceiling_at <= 0 %}
+              {% set ns.ok = false %}
+            {% endif %}
+            {% for reading in readings %}
+              {% set reported = as_timestamp(reading.last_reported, 0) %}
+              {% if not is_number(reading.state) or reading.state | float(-1) < 0
+                  or reported < changed or timestamp - reported < 0 or timestamp - reported > limits[reading.entity_id] %}
+                {% set ns.ok = false %}
+              {% elif reading.entity_id == 'sensor.bender_hems_limit' %}
+                {% if reading.state | float != cmd | float or reported < requested_at %}{% set ns.ok = false %}{% endif %}
+              {% elif 'sensor.bender_current_l' in reading.entity_id %}
+                {% if reading.state | float > (200 if cmd | int == 0 else (cmd | int + 1) * 1000) %}{% set ns.ok = false %}{% endif %}
+              {% elif cmd | int == 0 and reading.state | float > 50 %}
+                {% set ns.ok = false %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.ok }}
+          manual_ceiling: >
+            {% set desired = states('input_number.bender_manual_desired_current') %}
+            {% set maximum = states('input_number.bender_strategy_max_current') %}
+            {% set ready_at = as_timestamp(states.binary_sensor.bender_manual_increase_ready.last_changed, 0) %}
+            {% set changed_at = [as_timestamp(states.input_number.bender_commanded_current.last_changed, 0),
+                as_timestamp(states.input_number.bender_manual_desired_current.last_changed, 0),
+                as_timestamp(states.input_number.bender_strategy_max_current.last_changed, 0)] | max %}
+            {% if not is_number(desired) or desired | float != desired | int
+                or not (6 <= desired | int <= 16) or not is_number(maximum)
+                or not is_state('binary_sensor.bender_charging_control_healthy', 'on') %}
+              0
+            {% else %}
+              {% set base = [desired | int, maximum | int, 16] | min %}
+              {% set can_raise = manual_feedback_fresh and ack_confirmed
+                  and is_state('binary_sensor.bender_manual_increase_ready', 'on')
+                  and ready_at >= changed_at + 30 %}
+              {% set ramp = (6 if previous_command | int < 6 else previous_command | int + 1)
+                  if can_raise else previous_command | int %}
+              {{ [base, ramp] | min }}
+            {% endif %}
           applied_current: >
             {% set requested = requested_current | int(0) %}
+            {% if is_state('input_select.bender_charging_strategy', 'Manual') %}
+              {% set requested = [requested, manual_ceiling | int(0)] | min %}
+            {% endif %}
             {% set direct = is_state('input_select.bender_charging_strategy', 'Direct') %}
             {% set resume = is_state('binary_sensor.bender_direct_resume_ready', 'on')
                 and is_state('binary_sensor.bender_charger_stopped_fresh', 'on')
@@ -1167,6 +1324,8 @@ script:
             {% if requested < 6
                 or is_state('input_select.bender_charging_strategy', 'Uit')
                 or is_state('input_boolean.bender_failsafe_active', 'on')
+                or not is_state('script.bender_write_hems_zero', 'off')
+                or (ack_target | float == 0 and not ack_confirmed)
                 or (is_state('input_select.bender_failsafe_mode', 'Actief') and not ack_healthy)
                 or (direct and not is_state('binary_sensor.bender_charging_control_healthy', 'on'))
                 or (direct and previous_command | int(0) == 0 and not resume) %}
@@ -1220,12 +1379,33 @@ script:
             data:
               value: 0
 
-      - service: modbus.write_register
-        data:
-          hub: modbus_hub
-          slave: 1
-          address: 1000
-          value: "{{ applied_current }}"
+      # Helpers above are asynchronous service calls. Do not send a stale
+      # positive command if the user paused/changed strategy while they ran.
+      - if:
+          - condition: template
+            value_template: >
+              {{ as_timestamp(states.input_select.bender_charging_strategy.last_changed, 0) != strategy_at
+                 or (is_state('input_select.bender_charging_strategy', 'Manual')
+                   and as_timestamp(states.input_number.bender_manual_desired_current.last_changed, 0) != manual_intent_at) }}
+        then:
+          - stop: "Gebruikerskeuze veranderd tijdens voorbereiding; opnieuw beoordelen"
+      - if:
+          - condition: template
+            value_template: "{{ applied_current | int(0) == 0 }}"
+        then:
+          # Detached call is deliberate. A duplicate restart of this dispatcher
+          # must not propagate cancellation into an already active zero write.
+          # The worker's single mode drops duplicate starts, without queuing them.
+          - service: script.turn_on
+            target:
+              entity_id: script.bender_write_hems_zero
+        else:
+          - service: modbus.write_register
+            data:
+              hub: modbus_hub
+              slave: 1
+              address: 1000
+              value: "{{ applied_current }}"
 
       # Positive credit is enabled only after the Modbus service succeeds.
       - if:
@@ -1260,7 +1440,7 @@ script:
         data:
           name: "HEMS Limiet Ingesteld"
           message: >
-            → {{ applied_current }}A{% if _blocked %} ({{ requested_current }}A geblokkeerd door beveiliging){% endif %} |
+            → {{ applied_current }}A{% if applied_current | int == 0 %} (nulopdracht aangeboden; terugmelding volgt){% endif %}{% if _blocked %} ({{ requested_current }}A geblokkeerd door beveiliging){% endif %} |
             LB: {{ _lb }}A (L1:{{ _lb_l1 }} L2:{{ _lb_l2 }} L3:{{ _lb_l3 }}) |
             Grid L1:{{ _g_l1 }}W L2:{{ _g_l2 }}W L3:{{ _g_l3 }}W |
             Laadpaal L1:{{ _ch_l1 }}A L2:{{ _ch_l2 }}A L3:{{ _ch_l3 }}A |
@@ -1324,9 +1504,24 @@ script:
     alias: "Bender Stop Laden"
     icon: mdi:stop-circle
     sequence:
-      - service: script.set_bender_hems_limit
+      - if:
+          - condition: state
+            entity_id: input_select.bender_charging_strategy
+            state: Manual
+        then:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.bender_manual_desired_current
+            data:
+              value: 0
+      # Do not propagate cancellation from the restart-mode dispatcher to the
+      # caller (dashboard/API). Feedback monitoring still confirms the stop.
+      - service: script.turn_on
+        target:
+          entity_id: script.set_bender_hems_limit
         data:
-          current: 0
+          variables:
+            current: 0
       - service: input_text.set_value
         target:
           entity_id: input_text.bender_strategy_active_status
@@ -1347,6 +1542,13 @@ script:
         description: "Laadstroom per fase in Ampère"
         example: 10
     sequence:
+      - if:
+          - condition: state
+            entity_id: input_select.bender_charging_strategy
+            state: Manual
+        then:
+          - service: script.bender_manual_reconcile
+          - stop: "Manual gebruikt uitsluitend de apart opgeslagen gebruikerskeuze"
       - variables:
           requested_current: "{{ current | int }}"
           lb_enabled: "{{ is_state('input_boolean.bender_loadbalancer_enabled', 'on') }}"
@@ -1384,11 +1586,82 @@ script:
         default:
           - service: script.bender_stop_charging
 
-  # Stop active session by presenting the same RFID tag that started it
+  # Only explicit user choices update the persistent intent.
+  bender_manual_set_current:
+    alias: "Bender Manual Kies Laadstroom"
+    description: "Gebruikerskeuze; 0 is blijvende pauze. Automatische regeling mag dit niet aanroepen."
+    mode: restart
+    fields:
+      current:
+        description: "0 (pauze) of gehele 6–16 A"
+        example: 16
+    sequence:
+      - if:
+          - condition: template
+            value_template: >
+              {{ not (is_state('input_select.bender_charging_strategy', 'Manual')
+                  and is_number(current | default(none)) and current | float == current | int
+                  and (current | int == 0 or 6 <= current | int <= 16)) }}
+        then:
+          - stop: "Ongeldige Manual-keuze of Manual is niet actief"
+            error: true
+      - if:
+          - condition: template
+            value_template: "{{ current | int == 0 }}"
+        then:
+          - service: script.bender_stop_charging
+          - stop: "Handmatige pauze via de gezamenlijke stoproute"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.bender_manual_desired_current
+        data:
+          value: "{{ current | int }}"
+      - service: script.bender_manual_reconcile
+
+  bender_manual_reconcile:
+    alias: "Bender Manual Regel Gekozen Stroom"
+    mode: single
+    max_exceeded: silent
+    sequence:
+      - if:
+          - condition: template
+            value_template: "{{ not is_state('input_select.bender_charging_strategy', 'Manual') }}"
+        then:
+          - stop: "Manual niet actief"
+      - service: script.set_bender_hems_limit
+        data:
+          current: "{{ states('input_number.bender_manual_desired_current') | int(0) }}"
+          expected_strategy: Manual
+      - if:
+          - condition: template
+            value_template: "{{ not is_state('input_select.bender_charging_strategy', 'Manual') }}"
+        then:
+          - stop: "Strategie inmiddels gewijzigd"
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.bender_strategy_active_status
+        data:
+          value: >
+            {% set desired = states('input_number.bender_manual_desired_current') | int(0) %}
+            {% if desired == 0 %}
+              Manual: handmatig gepauzeerd
+            {% elif is_state('input_boolean.bender_failsafe_active', 'on') %}
+              Fail-safe actief; Manual-keuze {{ desired }}A bewaard
+            {% else %}
+              Manual: gekozen {{ desired }}A, opdracht {{ states('input_number.bender_commanded_current') | int(0) }}A; veilig opbouwen bij ruimte
+            {% endif %}
+
+  # Stop active session by presenting the same RFID tag that started it.
   bender_stop_session:
     alias: "Bender Stop Sessie (RFID)"
     icon: mdi:stop-circle-outline
     sequence:
+      - if:
+          - condition: state
+            entity_id: input_select.bender_charging_strategy
+            state: Manual
+        then:
+          - service: script.bender_stop_charging
       - variables:
           owner: "{{ states('sensor.bender_session_owner') }}"
       - choose:
@@ -1561,16 +1834,6 @@ automation:
               message: "Ingrijpen uitgeschakeld; modus is {{ failsafe_mode }}"
               entity_id: input_boolean.bender_failsafe_active
 
-      - if:
-          - condition: template
-            value_template: >
-              {{ failsafe_mode != 'Actief'
-                 and is_state('input_boolean.bender_failsafe_manual_restore_pending', 'on') }}
-        then:
-          - service: input_boolean.turn_off
-            target:
-              entity_id: input_boolean.bender_failsafe_manual_restore_pending
-
       - choose:
           # Mode Uit clears monitoring state and performs no watchdog action.
           - conditions:
@@ -1593,14 +1856,6 @@ automation:
                   - service: input_boolean.turn_off
                     target:
                       entity_id: input_boolean.bender_failsafe_observed
-              - if:
-                  - condition: state
-                    entity_id: input_boolean.bender_failsafe_manual_restore_pending
-                    state: "on"
-                then:
-                  - service: input_boolean.turn_off
-                    target:
-                      entity_id: input_boolean.bender_failsafe_manual_restore_pending
 
           - conditions:
               - condition: template
@@ -1643,9 +1898,6 @@ automation:
                   - variables:
                       previous_hems: "{{ states('sensor.bender_hems_limit') | int(0) }}"
                       strategy: "{{ states('input_select.bender_charging_strategy') }}"
-                  - service: input_boolean.turn_off
-                    target:
-                      entity_id: input_boolean.bender_failsafe_manual_restore_pending
                   - action: input_number.set_value
                     target:
                       entity_id: input_number.bender_failsafe_previous_hems
@@ -1779,18 +2031,6 @@ automation:
                   message: >
                     ✅ Laadpaal fail-safe opgeheven. DSMR, NodeRed en HEMS zijn 30 seconden stabiel.
                     Strategie {{ strategy }} wordt opnieuw beoordeeld met {{ lb_limit }}A beschikbaar.
-          # Manual has no independent setpoint: it normally reads the current
-          # HEMS value, which is 0A after a fail-safe. Arm a separate retry that
-          # waits until at least the EV minimum of 6A is safely available. The
-          # regular LB-aware charging script still performs the final clamp.
-          # Other strategies are recalculated by the NodeRed recovery trigger.
-          - if:
-              - condition: template
-                value_template: "{{ strategy == 'Manual' and previous_hems >= 6 }}"
-            then:
-              - action: input_boolean.turn_on
-                target:
-                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
       - service: logbook.log
         data:
           name: "Laadpaal Hard Fail-safe"
@@ -1799,109 +2039,49 @@ automation:
             Vorige HEMS: {{ previous_hems }}A | LB beschikbaar: {{ lb_limit }}A
           entity_id: input_boolean.bender_failsafe_observed
 
-  # Manual stores its desired value in the live HEMS register. A fail-safe sets
-  # that register to 0A, so a one-shot recovery can fail when less than 6A is
-  # available at that exact moment. Keep retrying without writing until at least
-  # 6A is safe. Any confirmed positive HEMS value completes the retry, including
-  # a manual user override, so this automation never fights a later choice.
-  - alias: "Bender Manual Fail-safe Herstel Opnieuw Proberen"
-    id: "bender_manual_failsafe_restore_retry"
-    description: "Hervat Manual veilig zodra na een fail-safe minimaal 6A beschikbaar is"
+  # One policy for normal limiting and post-fault recovery; no old HEMS snapshots.
+  - alias: "Bender Manual Regeling"
+    id: bender_manual_control
     mode: single
+    max_exceeded: silent
     trigger:
       - platform: time_pattern
-        seconds: "/10"
+        seconds: "/5"
+      - platform: homeassistant
+        event: start
       - platform: state
         entity_id:
-          - sensor.bender_hems_limit
+          - input_number.bender_manual_desired_current
+          - input_number.bender_strategy_max_current
           - input_select.bender_charging_strategy
-          - input_select.bender_failsafe_mode
+          - sensor.bender_loadbalancer_available_current
+          - binary_sensor.bender_manual_increase_ready
+          - binary_sensor.bender_charging_control_healthy
+          - input_boolean.bender_failsafe_active
     condition:
       - condition: state
-        entity_id: input_boolean.bender_failsafe_manual_restore_pending
-        state: "on"
-    variables:
-      strategy: "{{ states('input_select.bender_charging_strategy') }}"
-      failsafe_mode: "{{ states('input_select.bender_failsafe_mode') }}"
-      previous_hems: "{{ states('input_number.bender_failsafe_previous_hems') | int(0) }}"
-      current_hems_valid: >
-        {{ states('sensor.bender_hems_limit') not in ['unknown', 'unavailable'] }}
-      current_hems: "{{ states('sensor.bender_hems_limit') | int(0) }}"
-      lb_enabled: "{{ is_state('input_boolean.bender_loadbalancer_enabled', 'on') }}"
-      lb_limit: "{{ states('sensor.bender_loadbalancer_available_current') | float(0) if is_number(states('sensor.bender_loadbalancer_available_current')) else 0 }}"
-      safe_current: >
-        {% if lb_enabled %}
-          {{ [previous_hems, lb_limit, 16] | min | int }}
-        {% else %}
-          {{ [previous_hems, 16] | min | int }}
-        {% endif %}
+        entity_id: input_select.bender_charging_strategy
+        state: Manual
     action:
-      - choose:
-          # Changing strategy/mode is an explicit user choice: cancel the old
-          # Manual recovery instead of applying a delayed current unexpectedly.
-          - conditions:
-              - condition: template
-                value_template: >
-                  {{ strategy != 'Manual' or failsafe_mode != 'Actief' or previous_hems < 6 }}
-            sequence:
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
-              - service: logbook.log
-                data:
-                  name: "Laadpaal Manual Herstel"
-                  message: >
-                    Automatisch herstel geannuleerd | Strategie: {{ strategy }} |
-                    Fail-safe modus: {{ failsafe_mode }} | Vorige HEMS: {{ previous_hems }}A
-                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
+      - service: script.bender_manual_reconcile
 
-          # A confirmed positive read-back means either the automatic retry or
-          # a manual override succeeded. Stop immediately to avoid later raises.
-          - conditions:
-              - condition: template
-                value_template: "{{ current_hems_valid and current_hems >= 6 and is_state('binary_sensor.bender_hems_command_confirmed', 'on') }}"
-            sequence:
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
-              - service: logbook.log
-                data:
-                  name: "Laadpaal Manual Herstel"
-                  message: >
-                    Herstel bevestigd op {{ current_hems }}A; opgeslagen waarde was {{ previous_hems }}A
-                  entity_id: sensor.bender_hems_limit
-
-          # Do nothing while either watchdog input is unhealthy. At 6A or more,
-          # request the saved value; bender_set_charging_current clamps it to the
-          # currently available load-balancer capacity.
-          - conditions:
-              - condition: state
-                entity_id: binary_sensor.bender_dsmr_data_healthy
-                state: "on"
-              - condition: state
-                entity_id: binary_sensor.bender_nodered_heartbeat_healthy
-                state: "on"
-              - condition: state
-                entity_id: input_boolean.bender_failsafe_active
-                state: "off"
-              - condition: template
-                value_template: >
-                  {{ current_hems_valid and current_hems < 6 and safe_current >= 6
-                     and is_state('binary_sensor.bender_hems_control_healthy', 'on') }}
-            sequence:
-              - action: script.turn_on
-                target:
-                  entity_id: script.bender_set_charging_current
-                data:
-                  variables:
-                    current: "{{ previous_hems }}"
-              - service: logbook.log
-                data:
-                  name: "Laadpaal Manual Herstel"
-                  message: >
-                    Herpoging gestart | Opgeslagen: {{ previous_hems }}A |
-                    Veilig beschikbaar: {{ safe_current }}A | LB: {{ lb_limit | round(1) }}A
-                  entity_id: input_boolean.bender_failsafe_manual_restore_pending
+  # Leaving Manual explicitly cancels the old intent. Re-entering requires a new choice.
+  - alias: "Bender Manual Keuze Wissen Bij Strategie Wissel"
+    id: bender_manual_clear_on_strategy_change
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: input_select.bender_charging_strategy
+        from: Manual
+    condition:
+      - condition: template
+        value_template: "{{ not is_state('input_select.bender_charging_strategy', 'Manual') }}"
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.bender_manual_desired_current
+        data:
+          value: 0
 
   # Beëindigt de laadsessie op het ingestelde tijdstip door de juiste RFID-pas aan te bieden
   - alias: "Bender Manual Sessie Stop op Tijdstip"

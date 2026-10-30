@@ -39,7 +39,7 @@ class States:
 class Stop(Exception):pass
 class Harness:
     def __init__(self):
-        self.states=States();self.calls=[];self.fail_write=False
+        self.states=States();self.calls=[];self.fail_write=False;self.background_errors=[]
         self.env=jinja2.Environment(undefined=jinja2.StrictUndefined)
         self.env.filters.update(float=numeric,int=integer)
         self.env.globals.update(states=self.states,is_state=lambda e,s:self.states(e)==s,
@@ -49,8 +49,8 @@ class Harness:
             'input_boolean.bender_loadbalancer_enabled':'on','binary_sensor.bender_charging_control_healthy':'on',
             'binary_sensor.bender_direct_resume_ready':'off','binary_sensor.bender_charger_stopped_fresh':'off',
             'input_number.bender_requested_current':'0.0','input_number.bender_hems_unconfirmed_since':'0.0',
-            'binary_sensor.bender_nodered_heartbeat_healthy':'on','script.set_bender_hems_limit':'off',
-            'input_number.bender_commanded_current':'0.0','input_number.bender_strategy_max_current':'6',
+            'binary_sensor.bender_nodered_heartbeat_healthy':'on','script.set_bender_hems_limit':'off','script.bender_write_hems_zero':'off',
+            'input_number.bender_manual_desired_current':'0.0','input_number.bender_commanded_current':'0.0','input_number.bender_strategy_max_current':'6',
             'sensor.bender_loadbalancer_available_current':'16','sensor.bender_hems_limit':'0',
             'input_number.bender_house_max_power':'5000','input_number.bender_loadbalancer_margin':'5000',
             'input_select.bender_failsafe_mode':'Actief','binary_sensor.bender_dsmr_data_healthy':'on',
@@ -105,6 +105,9 @@ class Harness:
                 elif service=='modbus.write_register':
                     self.calls.append((service,int(data['value']),self.states('input_number.bender_commanded_current')))
                     if self.fail_write:raise RuntimeError('simulated Modbus failure')
+                elif service=='script.turn_on':
+                    try:self.run(target.split('.',1)[1],**data.get('variables',{}))
+                    except RuntimeError as error:self.background_errors.append(str(error))
                 elif service.startswith('script.'):self.run(service.split('.',1)[1],**data)
                 elif service!='logbook.log':raise AssertionError(service)
             else:raise AssertionError(action)
@@ -168,10 +171,10 @@ class SafetyTests(unittest.TestCase):
             self.assertEqual(h.calls[-1][1],0,(entity,value))
     def test_confirmed_commands_are_not_rewritten(self):
         h=Harness();h.run('set_bender_hems_limit',current=0);self.assertFalse(h.calls)
-    def test_direct_script_waits_then_starts_and_manual_writer_keeps_explicit_control(self):
+    def test_direct_script_waits_then_starts_and_other_strategies_use_generic_writer(self):
         h=Harness();h.run('bender_start_charging');self.assertFalse(h.calls)
         self.ready(h);h.run('bender_start_charging');self.assertEqual(h.calls[-1][1],6)
-        h=Harness();h.states.set('input_select.bender_charging_strategy','Manual')
+        h=Harness();h.states.set('input_select.bender_charging_strategy','ChargePV')
         h.run('set_bender_hems_limit',current=10);self.assertEqual(h.calls[-1][1],10)
         h.run('set_bender_hems_limit',current=0);self.assertEqual(h.calls[-1][1],0)
 if __name__=='__main__':unittest.main()

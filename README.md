@@ -48,23 +48,28 @@ Home Assistant is de centrale veiligheidslaag. Node-RED bepaalt de gewenste stra
 | --- | --- |
 | **Uit** | Schrijft een HEMS-limiet van `0 A`. Dit pauzeert laden; het is geen fysieke vergrendeling van de laadpaal. |
 | **Direct** | Start of hervat na bevestigde stilstand en 30 seconden stabiele laadruimte; gebruikt daarna de ingestelde maximale laadstroom, begrensd op `16 A` en de ingeschakelde loadbalancer. |
-| **Manual** | Behoudt de actuele HEMS-limiet als handmatige instelling. Als deze hoger is dan de beschikbare loadbalancerruimte, wordt hij veilig begrensd. |
+| **Manual** | Bewaart de gekozen stroom apart van de HEMS-limiet. Verlaagt bij tekort en bouwt bij herstel gecontroleerd terug op. Handmatige pauze blijft 0 A. |
 | **ChargePV** | Reageert op `sensor.p1_meter_power`, maximaal eenmaal per 10 seconden. Negatief P1-vermogen geldt als teruglevering. De flow rekent het overschot om naar een driefasen-laadstroom en laadt alleen vanaf minimaal `6 A` én het ingestelde minimale PV-overschot. |
 | **Dynamic** | Leest de vertrekdatum, benodigde kWh, maximale stroom en het `forecast`-attribuut van de Zonneplan-prijssensor. De goedkoopste benodigde uren vóór vertrek worden geselecteerd. Als de uiterste starttijd is bereikt, wordt laden als deadline-fallback gestart. De planning wordt bij activering en vervolgens ieder heel uur opnieuw berekend. |
 
-De instelling `input_number.bender_strategy_max_current` bepaalt de bovengrens voor Direct, ChargePV en Dynamic. De implementatie gaat uit van driefasenladen en een bovengrens van `16 A` per fase.
+De instelling `input_number.bender_strategy_max_current` bepaalt de bovengrens voor Direct, Manual, ChargePV en Dynamic. De implementatie gaat uit van driefasenladen en een bovengrens van `16 A` per fase.
 
-### Manual na een fail-safe
+### Manual: gekozen stroom, begrenzing en pauze
 
-Een harde fail-safe schrijft de HEMS-limiet naar `0 A`. Voor Manual wordt daarom de eerdere positieve HEMS-limiet opgeslagen. Na herstel:
+`input_number.bender_manual_desired_current` bewaart de gebruikerskeuze (0 of geheel 6–16 A), ook na een HA-herstart. De nieuwe helper begint bij de eerste installatie op **0 A / pauze**. De actuele HEMS-limiet wordt nooit automatisch als gebruikerskeuze overgenomen.
 
-1. moeten DSMR en Node-RED eerst 30 seconden stabiel gezond zijn;
-2. wordt alleen hersteld als minimaal `6 A` veilig beschikbaar is;
-3. wordt de oude waarde door de actuele loadbalancer begrensd;
-4. volgt zo nodig iedere 10 seconden een nieuwe poging;
-5. stopt de herstelpoging zodra een positieve HEMS-waarde is bevestigd of de gebruiker strategie/fail-safe-modus wijzigt.
+- De dashboardknoppen 6/10/16 A roepen `script.bender_manual_set_current` aan. De Pauze-knop en een geplande Manual-sessiestop wissen de keuze naar 0 A.
+- Bij onvoldoende ruimte wordt de opdracht meteen verlaagd, zo nodig naar 0 A. De Master-correctie bewaart hierbij de gewenste stroom. Deze correctie staat sinds 30 oktober op de server; de fysieke DSMR-herstel- en pauzetest na installatie is geslaagd. De maximale strategie-laadstroom is ook voor Manual een bovengrens.
+- Herstart vanuit stilstand begint op 6 A. Daarna volgt maximaal 1 A per stap, tot de gekozen stroom. Elke verhoging vereist verse terugmeldingen na de vorige opdracht en 30 seconden aaneengesloten ruimte voor de volgende stap. De wachttijd begint opnieuw bij een gewijzigde opdracht, keuze of maximum. Dit is een minimumwachttijd; de meetintervallen kunnen hem verlengen.
+- HEMS moet exact de vorige opdracht bevestigen. Fase- en vermogensmetingen moeten vers zijn; na een stop bovendien maximaal 200 mA per fase en 50 W totaal. Na een positieve opdracht mogen fasemetingen niet meer dan 1 A boven die opdracht liggen voordat verder wordt verhoogd. Dit is controle op vertraagde metingen, geen vervanging van de elektrische beveiliging.
+- De HA-fail-safe stopt het laden zonder de keuze te wissen. De oude Master-stoproute wiste bij DSMR-veroudering of laadruimte onder 6 A de keuze alsnog. Die route is lokaal gecorrigeerd en op 30 oktober geïnstalleerd; de fysieke DSMR-hertest is geslaagd (zie hieronder). Na gezond herstel gelden bij behouden keuze dezelfde opbouwvoorwaarden. Een handmatige pauze tijdens de storing blijft echter staan; oude herstelwaarden kunnen haar niet opheffen.
+- Bij verlaten van Manual wordt de keuze gewist. Na opnieuw selecteren van Manual kies je opnieuw een stroom. Zonder strategiewissel blijft de keuze ook zonder aangesloten auto gelden: opnieuw aansluiten kan dus laden hervatten.
 
-Hierdoor kan Manual na een tijdelijke storing veilig hervatten zonder een latere handmatige keuze te overschrijven.
+HA voert de regeling uit via `script.bender_manual_reconcile`, bij relevante veranderingen en iedere vijf seconden. De Manual-flow in Node-RED roept alleen dit script aan. De centrale HEMS-schrijver controleert de grenzen opnieuw; een oude Manual-opdracht mag een inmiddels andere strategie niet bedienen.
+
+**Voor bestaande eigen knoppen/automatiseringen:** gebruik voor een bewuste Manual-keuze `script.bender_manual_set_current` met `current: 0`, `6`, …, `16`. `script.bender_set_charging_current` beoordeelt in Manual voortaan alleen de opgeslagen keuze opnieuw; het aangeleverde getal verandert die keuze niet. Automatische begrenzing mag nooit het gebruikersscript aanroepen.
+
+Zie [het invoer- en testplan](docs/manual-memory-rollout.md). De uitbreiding is lokaal en op 29 oktober 2026 in HA met losgekoppelde auto getest, inclusief opbouw, begrenzing, herstel en blijvende pauze. Op 30 oktober zijn ook de fysieke 6/10 A-laadtest, tijdelijke begrenzing, herstel en pauze tijdens opbouw geslaagd. De gerichte Node-RED-heartbeattests met automatisch herstel en blijvende pauze zijn ook geslaagd. **Opgelost probleem uit de eerste DSMR-test:** de oude Master-stoproute wiste de Manual-keuze bij automatische stop. De gecorrigeerde route bewaart die keuze. De Master-correctie is lokaal getest (78 Python- en 8 Node-tests) en op 30 oktober om 10:47 CET geïnstalleerd met behoud van Uit/0 A. De fysieke herhaling van DSMR-herstel en Pauze tijdens storing is van 10:50 tot 11:04 CET geslaagd, inclusief gebruikersbevestiging van stoppen, hervatten en beide soorten pushmelding. Na Pauze bleef laden ook na herstel 90 seconden uit. De aanvullende test met laadruimte onder 6 A is om 11:19–11:23 CET op verse laadpaalmetingen geslaagd: automatisch stoppen bij 0 A ruimte, keuze 6 A behouden en zelfstandig hervatten na herstel. De gebruiker bevestigde de stop op het autoscherm; hervatten is bevestigd via verse fysieke laadpaalmetingen, niet afzonderlijk door de gebruiker. De HA-herstarttest op 30 oktober om 11:38–11:42 CET is eveneens geslaagd: Manual en keuze 0 A zijn hersteld, daarna twee minuten geen laadstroom bij beschikbare ruimte voor 16 A. Afgesloten op Uit/HEMS 0 A. Tijdens de HA-onderbreking was er geen continue laadpaalmeting; vóór en na de herstart waren de metingen vers en nul. Een aparte opstartmelding over een onbekende auto-SOC staat beschreven in het testplan.
 
 ## Loadbalancing
 
@@ -293,11 +298,31 @@ Direct hervat pas als:
 
 De controles staan in `binary_sensor.bender_charger_stopped_fresh` en `binary_sensor.bender_direct_resume_ready`. Een periodieke Direct-controle iedere 5 seconden zorgt ook bij een gelijkblijvende loadbalancerwaarde voor hervatten. De eerste start van Direct gebruikt dezelfde controle. Een HA-herstart begint conservatief met laatst gevraagde stroom 0 A. De versheidscontrole gebruikt `State.last_reported` (gevalideerd op HA 2026.10.4), zodat ook ongewijzigde nulmetingen kunnen bevestigen dat de controller wordt uitgelezen.
 
-De centrale HEMS-schrijver controleert de Direct-voorwaarden opnieuw, begrenst opdrachten op 0 of 6–16 A en slaat al bevestigde opdrachten over. Een nieuwe stop kan een oudere scriptuitvoering onderbreken. Manual behoudt zijn expliciete bediening; de wachttijd geldt voor Direct. ChargePV en Dynamic zijn hiermee niet functioneel gevalideerd.
+De centrale HEMS-schrijver controleert de Direct-voorwaarden opnieuw, begrenst opdrachten op 0 of 6–16 A en slaat al bevestigde opdrachten over. Een nieuwe stop kan een oudere scriptuitvoering onderbreken. Manual gebruikt daarnaast de hierboven beschreven afzonderlijke gebruikerskeuze en stapsgewijze opbouw. ChargePV en Dynamic zijn hiermee niet functioneel gevalideerd.
+
+### Automatische stop en handmatige Pauze
+
+De lokaal gecorrigeerde Master-flow stuurt ongeldige laadruimte en waarden onder 6 A via een aparte node naar `script.turn_on`, gericht op `script.set_bender_hems_limit` met vaste `variables.current: 0`. Dit houdt de bestaande stopbewaking in stand zonder de Manual-keuze te wissen. Berichtoverschrijvingen zijn geblokkeerd en de node heeft geen wachtrij. Uit en bewuste Pauze behouden de bestaande stoproute. De automatische route zet zelf nooit een oude keuze terug: een handmatige pauze blijft dus staan. Deze correctie is op **30 oktober 2026 om 10:47 CET op de server geladen**. Uit/0 A, gezonde bewaking en onveranderde overige flows/HA-bestanden zijn bevestigd. Bij de installatie is geen laadtest gestart. De daarna apart goedgekeurde fysieke DSMR-herstel- en pauzetest is geslaagd: keuze behouden bij automatische stop, hervatten op 6 A na gezond herstel, en blijvende 0 A na handmatige Pauze.
+
+### Gelijktijdige stopopdrachten
+
+De regelaar `script.set_bender_hems_limit` behoudt `restart`, zodat een stop voorrang houdt op een oudere positieve opdracht. Een daadwerkelijke nulwrite loopt voortaan los daarvan in `script.bender_write_hems_zero`, aangeroepen via `script.turn_on`. Deze interne schrijver kan uitsluitend register 1000 op **0 A** zetten en draait met `mode: single`: nieuwe starts tijdens een lopende nulwrite worden samengevoegd, zonder wachtrij en zonder annulering van die nulwrite.
+
+Bij een bewuste handmatige Pauze wordt de gekozen Manual-stroom vóór het stoppen gewist. Zowel de Pauze-knop als `bender_manual_set_current(current=0)` gebruiken dezelfde stoproute. Het pauzescript start de bewaakte regelaar via `script.turn_on` met `variables.current: 0`, zodat een herstart van die regelaar geen annulering teruggeeft aan de dashboard/API-aanroep. De nulstand wordt afzonderlijk via de bestaande terugmeldingsbewaking bevestigd. Dat wissen kan nog steeds de automatische regeling activeren; eventuele dubbele nulverzoeken zijn nu ook bij de daadwerkelijke schrijfactie afgevangen. Positieve opdrachten worden geblokkeerd zolang de nulpoging loopt of een gevraagde nulstand nog niet vers is bevestigd. Bij ontbrekende bevestiging blijven de bestaande herhaalpogingen, oudste deadline en fail-safe gelden. De logtekst vermeldt bij 0 A dat de opdracht is aangeboden; dat is nog geen bevestigde nulstand.
+
+Deze gerichte correctie voorkomt annulering **tussen nulopdrachten**. Een urgente stop mag een lopende positieve schrijfactie nog onderbreken; de Modbus-bibliotheek kan daarvoor een annuleringsmelding loggen. Een volle wachtrij met verouderde positieve opdrachten wordt niet geïntroduceerd.
+
+Status op 29 oktober 2026: de stopcorrectie is op de server geladen en getest met losgekoppelde auto. Normale Pauze en overlappende nulopdrachten vanaf een bevestigde 6 A-limiet gaven beide bevestigde 0 A; pauze bleef vervolgens 75 seconden staan bij beschikbare ruimte voor 16 A. De laatste testronde gaf geen HA/Modbus-foutmeldingen. Eindstand Uit/0 A. Op 30 oktober zijn de fysieke laad-, begrenzings-, herstel- en pauzetests eveneens geslaagd; zie het invoerplan. De gerichte Node-RED-uitvaltests zijn eveneens geslaagd; de aanvankelijk afgekeurde DSMR-hersteltest is na de Master-correctie succesvol herhaald, inclusief Pauze tijdens storing. Zie het invoerplan voor bewijs en resterende tests. De HA-herstarttest met behoud van pauze is op 30 oktober geslaagd; zie het invoerplan. Deze versie bevat de gevalideerde Manual-regeling en de bijbehorende testverslagen.
+
+## Auto-SOC bij ontbrekende gegevens
+
+`sensor.bender_ev_soc` toont alleen geldige percentages van 0 tot en met 100. Ontbrekende brondata, `unknown`, `unavailable`, de waarde 65535 en ongeldige getallen leveren `none` op. HA toont daarvoor **Onbekend**, zonder een fictieve 0% of een oude SOC vast te houden. Een werkelijk gemeten 0% blijft geldig. De bron blijft hetzelfde Modbus-register; deze weergavesensor stuurt de laadregeling niet aan.
+
+De op 30 oktober gevonden opstartmelding ontstond doordat de template letterlijk `unknown` retourneerde voor een numerieke sensor. [HA vereist hiervoor een getal of `none`](https://www.home-assistant.io/integrations/template/#sensor). De correctie is op 30 oktober 2026 om 17:04 CET op de server geladen via template-herladen, zonder HA-herstart. De configuratiecontrole slaagde; tijdens ruim twee minuten observatie bleef de SOC-fout weg bij bronwaarde 65535. Het serverpackage en beide lokale kopieën zijn gelijk. De regressietests toetsen ook ontbrekende brondata bij opstarten en verlies/herstel van een geldige SOC.
 
 ## Lokale regressietests
 
-De Master-trigger levert de sensorwaarde als `msg.payload`. De tests voeren de geëxporteerde Master-functie uit met een gesimuleerde klok en toetsen de echte HA-templates en volgorde van scriptacties. Ze openen geen verbinding met HA of de laadpaal.
+De Master-trigger levert de sensorwaarde als `msg.payload`. De aanvullende integratietests volgen de echte automatische-stopbedrading naar de servicegegevens en voeren de aangeroepen HA-scripts in het YAML-testmodel uit. De tests voeren de geëxporteerde Master-functie uit met een gesimuleerde klok en toetsen de echte HA-templates en volgorde van scriptacties. Ze openen geen verbinding met HA of de laadpaal.
 
 ```sh
 node --test tests/bender-master-loadbalancer.test.cjs
@@ -305,7 +330,7 @@ node --test tests/bender-master-loadbalancer.test.cjs
 python -m unittest discover -s tests -p 'test_*.py'
 ```
 
-De tests dekken berichtpieken, onmiddellijke verlagingen, annuleren van een wachtende verhoging, ontbrekende/ongeldige waarden, oude nulmetingen, fouten bij schrijven en de gemeten ongewenste 0 → 6 A-overgang. De opdrachtbewaking heeft daarnaast regressietests voor exacte en verse terugmelding, de 45-secondenlimiet, behoud van de oudste deadline, herstel na bevestigde nul en zelfstandig verlagen zonder verhogingen. Ze vervangen geen fysieke laadtest of controle van HA's timers en de Modbus-terugmelding.
+De asynchrone tests houden Modbus-antwoorden bewust tegen en toetsen dubbele stops, stop tijdens een positieve write, annulering van een aanroepend script, blokkeren van positieve opdrachten en herstel na een mislukte nulwrite. Ze gebruiken de werkelijke YAML met een lokaal model van HA-scriptplanning. De Manual-tests simuleren onder andere 16 → 12 → 13 → 14 → 15 → 16 A, pauze tijdens herstel, verouderde meetgegevens, mislukte opdrachten en een strategiewissel tijdens een opdracht. De tests dekken daarnaast berichtpieken, onmiddellijke verlagingen, annuleren van een wachtende verhoging, ontbrekende/ongeldige waarden, oude nulmetingen, fouten bij schrijven en de gemeten ongewenste 0 → 6 A-overgang. De opdrachtbewaking heeft daarnaast regressietests voor exacte en verse terugmelding, de 45-secondenlimiet, behoud van de oudste deadline, herstel na bevestigde nul en zelfstandig verlagen zonder verhogingen. Ze vervangen geen fysieke laadtest of controle van HA's timers en de Modbus-terugmelding.
 
 ## Gecontroleerd testen van de fail-safe
 
@@ -335,6 +360,7 @@ Zet bij gepland onderhoud aan Home Assistant, Node-RED of DSMR de fail-safe zo n
 | Entiteit | Betekenis | Standaard/bereik |
 | --- | --- | --- |
 | `input_select.bender_charging_strategy` | Actieve laadstrategie | Uit, Direct, Manual, ChargePV, Dynamic |
+| `input_number.bender_manual_desired_current` | Blijvende Manual-keuze; 0 is pauze | 0 of geheel 6–16 A; nieuwe helper 0 A |
 | `input_number.bender_strategy_max_current` | Maximale strategie-laadstroom per fase | 6–16 A; standaard 16 A |
 | `input_number.bender_strategy_pv_min_surplus` | Minimaal overschot voor ChargePV | 1.000–11.000 W; standaard 4.140 W |
 | `input_boolean.bender_loadbalancer_enabled` | Softwarematige loadbalancer aan/uit | instelbaar |
@@ -372,7 +398,7 @@ Controleer achtereenvolgens:
 3. de DSMR-, Node-RED- en HEMS-gezondheid en de HEMS-opdrachtstatus;
 4. de beschikbare loadbalancerstroom;
 5. of minstens `6 A` beschikbaar is;
-6. bij Manual: `input_boolean.bender_failsafe_manual_restore_pending`.
+6. bij Manual: de opgeslagen keuze, `binary_sensor.bender_manual_feedback_fresh` en `binary_sensor.bender_manual_increase_ready`. Bij keuze 0 A is bewust gepauzeerd.
 
 Een actieve fail-safe blokkeert iedere positieve opdracht via de meegeleverde scripts. Manual wacht na herstel bewust totdat minimaal `6 A` veilig beschikbaar is.
 

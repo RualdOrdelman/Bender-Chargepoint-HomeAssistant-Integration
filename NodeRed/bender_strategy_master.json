@@ -28,7 +28,8 @@
             "bender_master_link_manual",
             "bender_master_link_chargepv",
             "bender_master_link_dynamic",
-            "bender_master_debug"
+            "bender_master_debug",
+            "bender_master_automatic_stop"
         ],
         "x": 14,
         "y": 19,
@@ -251,7 +252,7 @@
                 "bender_master_fetch_strategy"
             ],
             [
-                "bender_master_link_uit"
+                "bender_master_automatic_stop"
             ]
         ]
     },
@@ -359,6 +360,36 @@
         "blockInputOverrides": false,
         "x": 690,
         "y": 60,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bender_master_automatic_stop",
+        "type": "api-call-service",
+        "z": "bender_strategy_master",
+        "g": "bender_master_group",
+        "name": "Automatic stop (keep Manual choice)",
+        "server": "b9d10367867e38e6",
+        "version": 7,
+        "debugenabled": false,
+        "action": "script.turn_on",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "script.set_bender_hems_limit"
+        ],
+        "labelId": [],
+        "data": "{\"variables\":{\"current\":0}}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": true,
+        "x": 600,
+        "y": 260,
         "wires": [
             []
         ]

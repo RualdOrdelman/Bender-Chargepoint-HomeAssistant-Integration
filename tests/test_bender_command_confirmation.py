@@ -8,7 +8,7 @@ WATCHDOG=next(a for a in PACKAGE['automation'] if a.get('id')=='bender_hard_fail
 RECOVERED=next(a for a in PACKAGE['automation'] if a.get('id')=='bender_hard_failsafe_recovered')
 class ConfirmationTests(unittest.TestCase):
     def harness(self,target=6,reported=0,age=20):
-        h=Harness();h.states.set('input_select.bender_charging_strategy','Manual')
+        h=Harness();h.states.set('input_select.bender_charging_strategy','ChargePV')
         h.states.set('input_number.bender_requested_current',target,changed=NOW-age)
         h.states.set('input_number.bender_hems_unconfirmed_since',NOW-age)
         h.states.set('sensor.bender_hems_limit',reported,reported=NOW)
@@ -19,14 +19,14 @@ class ConfirmationTests(unittest.TestCase):
             self.assertEqual(h.template('bender_hems_command_confirmed'),'False')
             self.assertEqual(h.template('bender_hems_control_healthy'),str(healthy),age)
     def test_service_success_is_not_feedback_confirmation(self):
-        h=Harness();h.states.set('input_select.bender_charging_strategy','Manual');h.run('set_bender_hems_limit',current=6)
+        h=Harness();h.states.set('input_select.bender_charging_strategy','ChargePV');h.run('set_bender_hems_limit',current=6)
         self.assertEqual(h.states('input_number.bender_commanded_current'),'6.0')
         self.assertEqual(h.states('input_number.bender_requested_current'),'6.0')
         self.assertEqual(h.template('bender_hems_command_confirmed'),'False')
         h.states.set('sensor.bender_hems_limit',6)
         self.assertEqual(h.template('bender_hems_command_confirmed'),'True')
     def test_failed_write_keeps_request_and_deadline_but_no_positive_credit(self):
-        h=Harness();h.states.set('input_select.bender_charging_strategy','Manual');h.fail_write=True
+        h=Harness();h.states.set('input_select.bender_charging_strategy','ChargePV');h.fail_write=True
         with self.assertRaises(RuntimeError):h.run('set_bender_hems_limit',current=10)
         self.assertEqual(h.states('input_number.bender_requested_current'),'10.0')
         self.assertEqual(float(h.states('input_number.bender_hems_unconfirmed_since')),NOW)
@@ -70,7 +70,7 @@ class ConfirmationTests(unittest.TestCase):
         self.assertIn({'condition':'state','entity_id':'binary_sensor.bender_hems_control_healthy','state':'on'},RECOVERED['condition'])
     def test_healthy_heartbeat_cannot_mask_hems_failure(self):
         h=self.harness(age=46);h.states.set('binary_sensor.bender_hems_control_healthy','off')
-        v=h.variables(WATCHDOG['variables']);fault=WATCHDOG['action'][2]['choose'][1]['conditions']
+        v=h.variables(WATCHDOG['variables']);fault=next(a['choose'] for a in WATCHDOG['action'] if 'choose' in a)[1]['conditions']
         self.assertTrue(v['nodered_healthy']);self.assertFalse(v['hems_healthy']);self.assertTrue(h.conditions(fault,v))
         self.assertIn('HEMS',v['failure_reason'])
     def test_guard_lowers_with_green_heartbeat_and_never_raises(self):

@@ -2,29 +2,15 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
-const flow = JSON.parse(fs.readFileSync(path.join(__dirname,'../NodeRed/bender_strategy_master.json')));
-const config = flow.find(n=>n.id==='bender_master_lb_rate_limit');
-function fixture() {
-  let now=10000, next=1;
-  const timers=new Map(), sent=[], storage=new Map();
-  const node={status(){},send(outputs){sent.push({at:now, outputs:structuredClone(outputs)});}};
-  const sandbox={node,msg:null,context:{get:k=>storage.get(k),set:(k,v)=>storage.set(k,v)},Date:{now:()=>now},Number,String,Math,
-    setTimeout(fn,ms){const id=next++;timers.set(id,{fn,at:now+ms});return id;},
-    clearTimeout(id){timers.delete(id);}};
-  const context=vm.createContext(sandbox);
-  const script=new vm.Script('(function(){'+config.func+'})()');
-  new vm.Script(config.initialize).runInContext(context);
-  return {sent,timers,
-    input(payload){sandbox.node={...node};sandbox.msg={_msgid:'test',payload};script.runInContext(context);},
-    advance(ms){const end=now+ms;for(;;){const due=[...timers].filter(([,x])=>x.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;},
-    close(){new vm.Script(config.finalize).runInContext(context);}
-  };
-}
-test('HA event carries payload and the stop output directly reaches the stop script',()=>{
+const {fixture,flow,config,automaticStopActions}=require('./master-flow-harness.cjs');
+test('automatic stop uses fixed zero without changing the user pause route',()=>{
   const trigger=flow.find(n=>n.id==='bender_master_lb_sensor_trigger');
   assert.ok(trigger.outputProperties.some(p=>p.property==='payload'&&p.valueType==='entityState'));
-  assert.deepEqual(config.wires,[['bender_master_fetch_strategy'],['bender_master_link_uit']]);
+  assert.deepEqual(config.wires,[['bender_master_fetch_strategy'],['bender_master_automatic_stop']]);
+  const stop=flow.find(n=>n.id==='bender_master_automatic_stop');
+  assert.equal(stop.queue,'none');assert.equal(stop.blockInputOverrides,true);
+  assert.deepEqual(automaticStopActions([16,0]),[{service:'script.turn_on',target:{entity_id:'script.set_bender_hems_limit'},data:{variables:{current:0}}}]);
+  assert.deepEqual(flow.find(n=>n.id==='bender_master_switch').wires[0],['bender_master_link_uit']);
   assert.equal(flow.find(n=>n.id==='bender_master_link_uit').action,'script.bender_stop_charging');
 });
 test('1000 rising updates retain only the latest refresh, never a FIFO backlog',()=>{

@@ -3,7 +3,7 @@ import unittest,datetime as dt
 from test_bender_stop_safety import Harness,TEMPLATES,NOW
 class MeasurementSafetyTests(unittest.TestCase):
     def harness(self):
-        h=Harness();h.states.set('input_select.bender_charging_strategy','Manual')
+        h=Harness();h.states.set('input_select.bender_charging_strategy','ChargePV')
         h.states.set('input_number.bender_requested_current','10',changed=NOW-60);h.states.set('sensor.bender_hems_limit','10');h.states.set('input_number.bender_commanded_current','10')
         return h
     def assert_rejected(self,h):
@@ -46,13 +46,13 @@ class MeasurementSafetyTests(unittest.TestCase):
             h=self.harness();h.states.set(f'sensor.dsmr_reading_phase_currently_{direction}_l2','-0.1');self.assert_rejected(h)
         for signed in ('-5000','0','5000'):
             h=self.harness();h.states.set('sensor.p1_meter_power',signed);self.assertEqual(h.template('bender_dsmr_data_healthy'),'True')
-    def test_manual_invalid_lb_never_falls_back_to_16A(self):
+    def test_generic_invalid_lb_never_falls_back_to_16A(self):
         for value in ('unknown','unavailable','nan','inf','','-1','5.9'):
             for entry in ('set_bender_hems_limit','bender_set_charging_current'):
                 with self.subTest(value=value,entry=entry):
                     h=self.harness();h.states.set('sensor.bender_loadbalancer_available_current',value)
                     h.run(entry,current=16);self.assertEqual(h.calls[-1][1],0)
-    def test_manual_valid_limit_caps_requested_current(self):
+    def test_generic_valid_limit_caps_requested_current(self):
         for limit,expected in [('6',6),('10.9',10),('16',16)]:
             h=self.harness();h.states.set('sensor.bender_loadbalancer_available_current',limit)
             h.run('set_bender_hems_limit',current=16)
