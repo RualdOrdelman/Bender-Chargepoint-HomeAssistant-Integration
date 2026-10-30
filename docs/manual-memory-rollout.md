@@ -2,6 +2,13 @@
 
 **Actuele stand — 30 oktober 2026:** de Manual-regeling, Master-stopcorrectie en SOC-correctie staan op de server. De afgesproken laad-, begrenzings-, herstel-, pauze- en HA-herstarttests zijn afgerond met de hieronder genoemde meetbeperkingen. De serverconfiguratie en de vijf actieve Bender-flows zijn vergeleken met de lokale exports. De secties hieronder zijn een chronologisch verslag; eerdere vermeldingen van openstaande stappen beschrijven de toenmalige stand.
 
+Ook de [heartbeat-tijdverwerking en het instellingenherstel](heartbeat-settings-rollout.md)
+en de [Manual-opstartcorrectie](manual-startup-warning.md) zijn inmiddels geïnstalleerd
+en na HA-herstarts gecontroleerd. De laatste controle bevestigde Uit/HEMS 0 A,
+gezonde bewaking en behoud van 16 A / 1.000 W / 17.250 W. De actuele regressieset
+omvat 101 Python- en 8 Node-tests in deze repository en 9 Python-tests in
+HomeAssistant-config (118 totaal). ChargePV en Dynamic zijn hierbij niet verder ontwikkeld.
+
 De aanvullende P1- en warmtepompcorrecties staan in de afzonderlijke HomeAssistant-config-repository en zijn op 30 oktober om 17:21 CET geïnstalleerd. Negen lokale regressietests slagen. De tweede template-herlaadcontrole gaf geen P1- of warmtepompvalidatorfout. De bestaande watchdog bleef ongewijzigd; tijdens herladen bleven de bekende meldingen over overlappende triggers bestaan, waarna de bewaking herstelde. Eindstand Uit/HEMS 0 A. Dit verandert de scope van de niet-afgeronde ChargePV- en Dynamic-strategieën niet.
 
 Status op 29 oktober 2026: stappen 1–3 zijn uitgevoerd; het Manual-package, dashboard en de Manual-flow staan op de server. Stap 4 is uitgevoerd met losgekoppelde auto: opbouw 0 → 6 → … → 16 A, begrenzing op 12 A met behoud van keuze 16 A, herstel, 75 seconden blijvende pauze en opnieuw selecteren van Manual zijn geslaagd. Eindstand: Uit, bevestigd 0 A, keuze 0 A, maximum 16 A.

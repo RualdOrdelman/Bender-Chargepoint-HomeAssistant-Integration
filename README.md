@@ -279,8 +279,8 @@ Gebruik voor de eerste controle een moment waarop de auto niet actief laadt.
 1. Zet **Fail-safe modus** eerst op `Monitoren`.
 2. Controleer op het tabblad Debugging dat Modbus-sensoren waarden ontvangen.
 3. Controleer dat DSMR, Node-RED en HEMS gezond worden weergegeven.
-4. Stel de capaciteit van de huisaansluiting in. De standaardwaarde `17.250 W` past bij de gebruikte 3 × 25 A-benadering.
-5. Stel een passende loadbalancermarge in; standaard is `1.000 W`.
+4. Stel de capaciteit van de huisaansluiting en de maximale strategie-laadstroom in. `17.250 W` past bij de gebruikte 3 × 25 A-benadering; controleer of dit bij jouw aansluiting past.
+5. Stel een passende loadbalancermarge in; in deze installatie is eerder `1.000 W` gebruikt. De drie instellingen worden bewaard. Zonder herstelgegevens beginnen ze op 6 A, 0 W marge en 5.000 W aansluitvermogen; controleer ze vóór laden.
 6. Schakel de loadbalancer in.
 7. Test `Uit` en daarna met toezicht een lage Manual-instelling.
 8. Test de overige strategieën pas nadat de basisbediening en begrenzing kloppen.
@@ -319,6 +319,50 @@ Status op 29 oktober 2026: de stopcorrectie is op de server geladen en getest me
 `sensor.bender_ev_soc` toont alleen geldige percentages van 0 tot en met 100. Ontbrekende brondata, `unknown`, `unavailable`, de waarde 65535 en ongeldige getallen leveren `none` op. HA toont daarvoor **Onbekend**, zonder een fictieve 0% of een oude SOC vast te houden. Een werkelijk gemeten 0% blijft geldig. De bron blijft hetzelfde Modbus-register; deze weergavesensor stuurt de laadregeling niet aan.
 
 De op 30 oktober gevonden opstartmelding ontstond doordat de template letterlijk `unknown` retourneerde voor een numerieke sensor. [HA vereist hiervoor een getal of `none`](https://www.home-assistant.io/integrations/template/#sensor). De correctie is op 30 oktober 2026 om 17:04 CET op de server geladen via template-herladen, zonder HA-herstart. De configuratiecontrole slaagde; tijdens ruim twee minuten observatie bleef de SOC-fout weg bij bronwaarde 65535. Het serverpackage en beide lokale kopieën zijn gelijk. De regressietests toetsen ook ontbrekende brondata bij opstarten en verlies/herstel van een geldige SOC.
+
+## Heartbeat-tijd en instellingenherstel
+
+**Status 30 oktober 2026: op de server geïnstalleerd en de HA-herstarttest is geslaagd.**
+Bij deze uitrol waren server en beide lokale packages identiek. De Node-RED-flows en het dashboard zijn ongewijzigd. De hieronder beschreven aanvullende opstartcorrectie is inmiddels eveneens geïnstalleerd en na een HA-herstart gecontroleerd.
+De test gebruikte tijdelijk 10 A, 1.500 W marge en 15.000 W aansluitvermogen; deze
+waarden kwamen exact terug na herstart en bleven een minuut stabiel. Daarna zijn
+de oorspronkelijke 16 A, 1.000 W en 17.250 W teruggezet en in de herstelopslag
+geverifieerd. Eindcontrole om 18:00 CET: Uit, HEMS 0 A, 0 W en gezonde bewaking.
+Deze versie bevat de geïnstalleerde correcties, regressietests en servertestverslagen.
+
+De Node-RED-heartbeat wordt al als Unix-tijdstempel verstuurd. HA gebruikt nu het
+`timestamp`-attribuut van `input_datetime.bender_nodered_heartbeat`, zodat beide
+voorkomens van 02:30 tijdens de wintertijdovergang worden onderscheiden. Ontbrekende,
+ongeldige of meer dan vijf seconden toekomstige tijdstempels geven ongezond.
+De bestaande grens van 30 seconden blijft gelijk. Na een HA-start begint de helper
+met een oude vaste datum: pas een nieuwe heartbeat kan deze bewaking gezond maken.
+Dit voorkomt ook vertrouwen op een herstelde lokale tijd zonder tijdzone.
+
+De strategielimiet, loadbalancermarge en het aansluitvermogen hebben geen vaste
+`initial` meer. HA herstelt hun opgeslagen waarden, ook een bewust gekozen marge
+van 0 W. Bij een nieuwe installatie of ontbrekende/ongeldige herstelgegevens vallen
+ze terug op hun ondergrenzen: **6 A, 0 W en 5.000 W**. Controleer en configureer deze
+drie waarden vóór laden; 16 A, 1.000 W en 17.250 W zijn de eerder gebruikte
+installatiewaarden, geen automatische startwaarden meer. Manual-pauze en het
+op nul beginnen van tijdelijke laadopdrachten zijn ongewijzigd.
+
+Zie [de lokale controles en het servertestverslag](docs/heartbeat-settings-rollout.md).
+
+## Manual-opstartwaarschuwing
+
+Tijdens de eerste HA-herstart op 30 oktober om 17:55:40 ontbrak
+`binary_sensor.bender_manual_increase_ready` nog. De gezamenlijke HEMS-schrijfroute
+las toch zijn `last_changed`, ook bij Uit, en gaf daardoor een templatewaarschuwing.
+De correctie controleert eerst of het sensorobject bestaat. Zonder sensor
+wordt geen gereedtijd aangenomen en blijft verhogen geblokkeerd. Stoppen, verlagen,
+de bestaande wachttijd en het bewaren van een handmatige pauze blijven behouden.
+
+**Status 30 oktober 2026: geïnstalleerd en na een HA-herstart gecontroleerd.**
+De Manual-opstartwaarschuwing bleef weg in deze herstartronde. Eindcontrole om
+18:13:14 CET: Uit, HEMS 0 A, 0 W, gezonde bewaking en instellingen
+16 A / 1.000 W / 17.250 W behouden. Server en beide lokale packages zijn gelijk.
+Node-RED en dashboard zijn niet gewijzigd. De correctie, regressietests en testverslagen zijn in deze versie opgenomen.
+Zie [onderzoek en tests](docs/manual-startup-warning.md).
 
 ## Lokale regressietests
 
@@ -361,11 +405,11 @@ Zet bij gepland onderhoud aan Home Assistant, Node-RED of DSMR de fail-safe zo n
 | --- | --- | --- |
 | `input_select.bender_charging_strategy` | Actieve laadstrategie | Uit, Direct, Manual, ChargePV, Dynamic |
 | `input_number.bender_manual_desired_current` | Blijvende Manual-keuze; 0 is pauze | 0 of geheel 6–16 A; nieuwe helper 0 A |
-| `input_number.bender_strategy_max_current` | Maximale strategie-laadstroom per fase | 6–16 A; standaard 16 A |
+| `input_number.bender_strategy_max_current` | Maximale strategie-laadstroom per fase | 6–16 A; herstelt keuze, zonder herstel 6 A |
 | `input_number.bender_strategy_pv_min_surplus` | Minimaal overschot voor ChargePV | 1.000–11.000 W; standaard 4.140 W |
 | `input_boolean.bender_loadbalancer_enabled` | Softwarematige loadbalancer aan/uit | instelbaar |
-| `input_number.bender_house_max_power` | Totale capaciteit voor de loadbalancerberekening | 5.000–25.000 W; standaard 17.250 W |
-| `input_number.bender_loadbalancer_margin` | Gereserveerde veiligheidsmarge | 0–5.000 W; standaard 1.000 W |
+| `input_number.bender_house_max_power` | Totale capaciteit voor de loadbalancerberekening | 5.000–25.000 W; herstelt keuze, zonder herstel 5.000 W |
+| `input_number.bender_loadbalancer_margin` | Gereserveerde veiligheidsmarge | 0–5.000 W; herstelt keuze, zonder herstel 0 W |
 | `input_select.bender_failsafe_mode` | Gedrag van de watchdog | Monitoren, Uit, Actief |
 | `input_boolean.bender_failsafe_notifications_enabled` | Push bij fail-safe en herstel | instelbaar |
 | `input_datetime.bender_strategy_departure_time` | Vertrekmoment voor Dynamic | door gebruiker |
