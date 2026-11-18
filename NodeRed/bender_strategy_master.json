@@ -33,8 +33,8 @@
         ],
         "x": 14,
         "y": 19,
-        "w": 782,
-        "h": 322
+        "w": 1002,
+        "h": 282
     },
     {
         "id": "bender_master_trigger",
@@ -316,8 +316,8 @@
         "checkall": "true",
         "repair": false,
         "outputs": 5,
-        "x": 460,
-        "y": 180,
+        "x": 560,
+        "y": 140,
         "wires": [
             [
                 "bender_master_link_uit"
@@ -358,7 +358,7 @@
         "outputProperties": [],
         "queue": "none",
         "blockInputOverrides": false,
-        "x": 690,
+        "x": 820,
         "y": 60,
         "wires": [
             []
@@ -388,7 +388,7 @@
         "outputProperties": [],
         "queue": "none",
         "blockInputOverrides": true,
-        "x": 600,
+        "x": 670,
         "y": 260,
         "wires": [
             []
@@ -404,7 +404,7 @@
         "links": [
             "bender_direct_start_link"
         ],
-        "x": 695,
+        "x": 965,
         "y": 140,
         "wires": []
     },
@@ -418,7 +418,7 @@
         "links": [
             "bender_manual_start_link"
         ],
-        "x": 695,
+        "x": 965,
         "y": 180,
         "wires": []
     },
@@ -432,7 +432,7 @@
         "links": [
             "bender_chargepv_start_link"
         ],
-        "x": 695,
+        "x": 965,
         "y": 220,
         "wires": []
     },
@@ -446,8 +446,8 @@
         "links": [
             "bender_dynamic_start_link"
         ],
-        "x": 695,
-        "y": 300,
+        "x": 975,
+        "y": 260,
         "wires": []
     },
     {
@@ -486,8 +486,8 @@
         "for": "0",
         "forType": "num",
         "forUnits": "minutes",
-        "x": 300,
-        "y": 380,
+        "x": 390,
+        "y": 340,
         "wires": [
             [
                 "bender_master_init"
@@ -526,8 +526,8 @@
         "ignoreCurrentStateUnknown": false,
         "ignoreCurrentStateUnavailable": false,
         "outputProperties": [],
-        "x": 110,
-        "y": 380,
+        "x": 130,
+        "y": 340,
         "wires": [
             [
                 "bender_master_fetch_strategy"

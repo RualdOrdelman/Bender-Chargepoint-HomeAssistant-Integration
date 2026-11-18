@@ -646,7 +646,12 @@ template:
         device_class: power
         state: >
           {% set p1_l1 = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
-          {% set ch_l1_ma = [[states('sensor.bender_current_l1') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
+          {% set reading = states.sensor.bender_current_l1 %}
+          {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+          {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+          {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+              and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+          {% set ch_l1_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
           {% set ch_l1_w = (ch_l1_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
           {{ (p1_l1 - ch_l1_w) | round(0) }}
 
@@ -656,7 +661,12 @@ template:
         device_class: power
         state: >
           {% set p1_l2 = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
-          {% set ch_l2_ma = [[states('sensor.bender_current_l2') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
+          {% set reading = states.sensor.bender_current_l2 %}
+          {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+          {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+          {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+              and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+          {% set ch_l2_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
           {% set ch_l2_w = (ch_l2_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
           {{ (p1_l2 - ch_l2_w) | round(0) }}
 
@@ -666,13 +676,21 @@ template:
         device_class: power
         state: >
           {% set p1_l3 = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
-          {% set ch_l3_ma = [[states('sensor.bender_current_l3') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
+          {% set reading = states.sensor.bender_current_l3 %}
+          {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+          {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+          {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+              and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+          {% set ch_l3_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
           {% set ch_l3_w = (ch_l3_ma / 1000) * states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
           {{ (p1_l3 - ch_l3_w) | round(0) }}
 
       # Available Current per phase (Bottleneck Calculation)
-      # Credit is capped at the last command, and becomes zero BEFORE a stop
-      # write. Old 10s Modbus readings must not create fictitious restart room.
+      # While commanded to charge, credit uses fresh measured current, NOT the
+      # new command: command-clipping creates a 16 -> 14 -> ... -> 0 feedback loop.
+      # Reject missing/stale/implausible readings; cap credit at installation max 16A.
+      # Credit still becomes zero BEFORE a stop write, preventing false restart room.
+      # Existing confirmation/stability guards control increases; reductions stay immediate.
       # Calculates available amps for each phase: (Max - Margin - (Grid - Charger))
       # Returns the minimum available amps across all 3 phases (capped at 16A)
       - name: "Bender Loadbalancer Available Current"
@@ -713,7 +731,12 @@ template:
             {% set v_l1 = states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
             {% set grid_l1_w = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
             {% set grid_l1_a = grid_l1_w / v_l1 %}
-            {% set ch_l1_ma = [[states('sensor.bender_current_l1') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
+            {% set reading = states.sensor.bender_current_l1 %}
+            {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+            {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+            {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+                and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+            {% set ch_l1_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
             {% set ch_l1_a = ch_l1_ma / 1000 %}
             {# Available = Limit - (Grid load without charger) = Limit - (Grid - Charger) #}
             {% set avail_l1 = limit_amps - grid_l1_a + ch_l1_a %}
@@ -722,7 +745,12 @@ template:
             {% set v_l2 = states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
             {% set grid_l2_w = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
             {% set grid_l2_a = grid_l2_w / v_l2 %}
-            {% set ch_l2_ma = [[states('sensor.bender_current_l2') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
+            {% set reading = states.sensor.bender_current_l2 %}
+            {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+            {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+            {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+                and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+            {% set ch_l2_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
             {% set ch_l2_a = ch_l2_ma / 1000 %}
             {% set avail_l2 = limit_amps - grid_l2_a + ch_l2_a %}
             
@@ -730,7 +758,12 @@ template:
             {% set v_l3 = states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
             {% set grid_l3_w = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
             {% set grid_l3_a = grid_l3_w / v_l3 %}
-            {% set ch_l3_ma = [[states('sensor.bender_current_l3') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max %}
+            {% set reading = states.sensor.bender_current_l3 %}
+            {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+            {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+            {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+                and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+            {% set ch_l3_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
             {% set ch_l3_a = ch_l3_ma / 1000 %}
             {% set avail_l3 = limit_amps - grid_l3_a + ch_l3_a %}
             
@@ -759,7 +792,13 @@ template:
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
             {% set grid_l1_w = (states('sensor.dsmr_reading_phase_currently_delivered_l1') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l1') | float(0)) * 1000 %}
             {% set grid_l1_a = grid_l1_w / states('sensor.dsmr_reading_phase_voltage_l1') | float(230) %}
-            {% set ch_l1_a = [[states('sensor.bender_current_l1') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max / 1000 %}
+            {% set reading = states.sensor.bender_current_l1 %}
+            {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+            {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+            {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+                and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+            {% set ch_l1_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
+            {% set ch_l1_a = ch_l1_ma / 1000 %}
             {{ (limit_amps - grid_l1_a + ch_l1_a) | round(1) }}
           {% else %}
             16.0
@@ -779,7 +818,13 @@ template:
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
             {% set grid_l2_w = (states('sensor.dsmr_reading_phase_currently_delivered_l2') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l2') | float(0)) * 1000 %}
             {% set grid_l2_a = grid_l2_w / states('sensor.dsmr_reading_phase_voltage_l2') | float(230) %}
-            {% set ch_l2_a = [[states('sensor.bender_current_l2') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max / 1000 %}
+            {% set reading = states.sensor.bender_current_l2 %}
+            {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+            {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+            {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+                and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+            {% set ch_l2_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
+            {% set ch_l2_a = ch_l2_ma / 1000 %}
             {{ (limit_amps - grid_l2_a + ch_l2_a) | round(1) }}
           {% else %}
             16.0
@@ -799,7 +844,13 @@ template:
             {% set limit_amps = (max_power / 3 / 230) - (margin_power / 3 / 230) %}
             {% set grid_l3_w = (states('sensor.dsmr_reading_phase_currently_delivered_l3') | float(0) - states('sensor.dsmr_reading_phase_currently_returned_l3') | float(0)) * 1000 %}
             {% set grid_l3_a = grid_l3_w / states('sensor.dsmr_reading_phase_voltage_l3') | float(230) %}
-            {% set ch_l3_a = [[states('sensor.bender_current_l3') | float(0), states('input_number.bender_commanded_current') | float(0) * 1000] | min, 0] | max / 1000 %}
+            {% set reading = states.sensor.bender_current_l3 %}
+            {% set cmd = states('input_number.bender_commanded_current') | float(0) %}
+            {% set age = as_timestamp(now()) - as_timestamp(reading.last_reported, 0) %}
+            {% set valid = 6 <= cmd <= 16 and cmd == cmd | int and is_number(reading.state)
+                and 0 <= reading.state | float(0) <= 17000 and 0 <= age <= 25 %}
+            {% set ch_l3_ma = [reading.state | float(0), 16000] | min if valid else 0 %}
+            {% set ch_l3_a = ch_l3_ma / 1000 %}
             {{ (limit_amps - grid_l3_a + ch_l3_a) | round(1) }}
           {% else %}
             16.0
@@ -1276,7 +1327,8 @@ script:
             {% set ns = namespace(ok=is_number(cmd) and is_number(requested)
                 and cmd | float == requested | float and cmd | float == cmd | int
                 and (cmd | int == 0 or 6 <= cmd | int <= 16)
-                and timestamp - ([changed, intent_at, ceiling_at] | max) >= 5) %}
+                and ((manual_user_request | default(false)) == true
+                  or timestamp - ([changed, intent_at, ceiling_at] | max) >= 5)) %}
             {% set limits = {'sensor.bender_current_l1': 25, 'sensor.bender_current_l2': 25,
                 'sensor.bender_current_l3': 25, 'sensor.bender_totalpower': 25, 'sensor.bender_hems_limit': 45} %}
             {% set readings = expand(limits.keys() | list) %}
@@ -1317,7 +1369,14 @@ script:
                   and ready_at >= changed_at + 30 %}
               {% set ramp = (6 if previous_command | int < 6 else previous_command | int + 1)
                   if can_raise else previous_command | int %}
-              {{ [base, ramp] | min }}
+              {# Only the explicit button path may skip automatic recovery ramping. #}
+              {% if (manual_user_request | default(false)) == true
+                  and manual_feedback_fresh and ack_confirmed
+                  and requested_current | int == desired | int %}
+                {{ base }}
+              {% else %}
+                {{ [base, ramp] | min }}
+              {% endif %}
             {% endif %}
           applied_current: >
             {% set requested = requested_current | int(0) %}
@@ -1624,7 +1683,12 @@ script:
           entity_id: input_number.bender_manual_desired_current
         data:
           value: "{{ current | int }}"
-      - service: script.bender_manual_reconcile
+      # One invocation only: automatic reconciliation never inherits this flag.
+      - service: script.set_bender_hems_limit
+        data:
+          current: "{{ current | int }}"
+          expected_strategy: Manual
+          manual_user_request: true
 
   bender_manual_reconcile:
     alias: "Bender Manual Regel Gekozen Stroom"
@@ -1636,6 +1700,16 @@ script:
             value_template: "{{ not is_state('input_select.bender_charging_strategy', 'Manual') }}"
         then:
           - stop: "Manual niet actief"
+      # A change of intent triggers this automation too. Let the explicit
+      # button call finish; the next regular tick updates the status text.
+      # Independent fault/zero writers remain active throughout.
+      - if:
+          - condition: template
+            value_template: >
+              {{ is_state('script.bender_manual_set_current', 'on')
+                 and states('input_number.bender_manual_desired_current') | int(0) > 0 }}
+        then:
+          - stop: "Bewuste Manual-opdracht wordt verwerkt"
       - service: script.set_bender_hems_limit
         data:
           current: "{{ states('input_number.bender_manual_desired_current') | int(0) }}"
